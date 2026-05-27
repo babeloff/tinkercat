@@ -14,6 +14,14 @@ interface Graph : AutoCloseable {
     fun addVertex(vararg keyValues: Any?): Vertex
 
     /**
+     * Add a vertex to the graph with the given label.
+     * Convenience overload matching TinkerPop convention: graph.addVertex("person").
+     * @param label the vertex label
+     * @return the newly created vertex
+     */
+    fun addVertex(label: String): Vertex = addVertex(mapOf("label" to label))
+
+    /**
      * Add a vertex to the graph given a map of properties
      * @param properties map of key/value pairs
      * @return the newly created vertex

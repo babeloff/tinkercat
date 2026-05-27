@@ -1,6 +1,6 @@
-= TinkerGraphs Python Bindings
+= TinkerCat Python Bindings
 
-Python bindings for the TinkerGraph Kotlin multiplatform implementation,
+Python bindings for the TinkerCat Kotlin multiplatform implementation,
 providing a high-performance, native graph database for Python applications.
 
 == Features
@@ -24,7 +24,7 @@ providing a high-performance, native graph database for Python applications.
 [source,bash]
 ----
 # Navigate to the project root
-cd /path/to/tinkergraphs
+cd /path/to/tinkercat
 
 # Install dependencies
 pixi install
@@ -42,10 +42,10 @@ pixi run python-setup
 
 [source,python]
 ----
-from tinkergraphs import TinkerGraph
+from tinkercat import TinkerCat
 
 # Create a new graph
-graph = TinkerGraph()
+graph = TinkerCat()
 
 # Add vertices
 alice = graph.add_vertex("person", name="Alice", age=30)
@@ -72,7 +72,7 @@ print(f"Alice works for {len(coworkers)} organizations")
 [source,python]
 ----
 # Automatic resource cleanup
-with TinkerGraph() as graph:
+with TinkerCat() as graph:
     alice = graph.add_vertex("person", name="Alice")
     bob = graph.add_vertex("person", name="Bob")
     graph.add_edge("knows", alice, bob)
@@ -138,7 +138,7 @@ old_age = vertex.remove_property("age")
 
 == API Reference
 
-=== TinkerGraph
+=== TinkerCat
 
 The main graph class providing vertex and edge management.
 
@@ -204,26 +204,26 @@ The library provides comprehensive error handling with custom exception types:
 
 [source,python]
 ----
-from tinkergraphs.exceptions import (
-    TinkerGraphError,           # Base exception
-    TinkerGraphLibraryError,    # Library loading issues
-    TinkerGraphValidationError, # Input validation errors
-    TinkerGraphVertexError,     # Vertex operation errors
-    TinkerGraphEdgeError        # Edge operation errors
+from tinkercat.exceptions import (
+    TinkerCatError,           # Base exception
+    TinkerCatLibraryError,    # Library loading issues
+    TinkerCatValidationError, # Input validation errors
+    TinkerCatVertexError,     # Vertex operation errors
+    TinkerCatEdgeError        # Edge operation errors
 )
 
 try:
-    graph = TinkerGraph()
+    graph = TinkerCat()
     vertex = graph.add_vertex("person", name="Alice")
-except TinkerGraphLibraryError as e:
+except TinkerCatLibraryError as e:
     print(f"Failed to load native library: {e}")
-except TinkerGraphValidationError as e:
+except TinkerCatValidationError as e:
     print(f"Invalid parameters: {e}")
 ----
 
 == Performance
 
-TinkerGraphs Python bindings provide native-level performance:
+TinkerCat Python bindings provide native-level performance:
 
 * *Vertex Creation*: ~400-500 vertices/second
 * *Edge Creation*: ~500-600 edges/second
@@ -251,7 +251,7 @@ pixi run python-test
 cd python && python -m pytest tests/test_graph.py -v
 
 # Run with coverage
-cd python && python -m pytest tests/ --cov=tinkergraphs
+cd python && python -m pytest tests/ --cov=tinkercat
 ----
 
 === Building Documentation

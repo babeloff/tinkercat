@@ -1,15 +1,15 @@
 [versions]
-kotlin = "2.2.0"
-dokka = "1.9.20"
-kotlinx-serialization = "1.7.3"
-kotlinx-coroutines = "1.8.1"
-kotlinx-datetime = "0.6.1"
+kotlin = "2.3.20"
+dokka = "2.0.0"
+kotlinx-serialization = "1.8.1"
+kotlinx-coroutines = "1.9.0"
+kotlinx-datetime = "0.6.2"
 kermit = "2.0.8"
-logback = "1.4.14"
-tinkerpop = "3.7.0"
-junit = "5.11.0"
+logback = "1.5.18"
+tinkerpop = "3.8.1"
+junit = "5.12.2"
 kotest = "6.0.3"
-ksp = "2.2.0-2.0.2"
+ksp = "2.3.9"
 
 [libraries]
 # Kotlin and KotlinX
@@ -24,7 +24,7 @@ kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 
 # TinkerPop
 tinkerpop-gremlin-core = { module = "org.apache.tinkerpop:gremlin-core", version.ref = "tinkerpop" }
-tinkerpop-tinkergraph-gremlin = { module = "org.apache.tinkerpop:tinkergraph-gremlin", version.ref = "tinkerpop" }
+tinkerpop-tinkercat-gremlin = { module = "org.apache.tinkerpop:tinkergraph-gremlin", version.ref = "tinkerpop" }
 tinkerpop-gremlin-groovy = { module = "org.apache.tinkerpop:gremlin-groovy", version.ref = "tinkerpop" }
 
 # Testing - JUnit
@@ -42,7 +42,7 @@ kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest"
 common-main = ["kotlinx-serialization-core", "kotlinx-coroutines-core", "kotlinx-datetime", "kermit"]
 
 # JVM-specific dependencies
-jvm-main = ["kotlinx-serialization-json", "kotlinx-coroutines-core", "tinkerpop-gremlin-core", "tinkerpop-tinkergraph-gremlin", "tinkerpop-gremlin-groovy"]
+jvm-main = ["kotlinx-serialization-json", "kotlinx-coroutines-core", "tinkerpop-gremlin-core", "tinkerpop-tinkercat-gremlin", "tinkerpop-gremlin-groovy"]
 
 # JS-specific dependencies
 js-main = ["kotlinx-coroutines-core", "kotlinx-serialization-json"]

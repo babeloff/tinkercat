@@ -1,4 +1,4 @@
-= TinkerGraph Kotlin Multiplatform
+= TinkerCat Kotlin Multiplatform
 :toc: left
 :toclevels: 3
 :sectnums:
@@ -11,7 +11,7 @@ image:https://img.shields.io/badge/status-alpha-yellow.svg[Status]
 
 == Overview
 
-TinkerGraph Kotlin Multiplatform is a complete reimplementation of Apache TinkerPop's TinkerGraph in-memory graph database using Kotlin Multiplatform. This implementation provides native support for JVM, JavaScript (Node.js/Browser), and Native platforms while maintaining full API compatibility with the original Java implementation.
+TinkerCat Kotlin Multiplatform is a complete reimplementation of Apache TinkerPop's TinkerCat in-memory graph database using Kotlin Multiplatform. This implementation provides native support for JVM, JavaScript (Node.js/Browser), and Native platforms while maintaining full API compatibility with the original Java implementation.
 
 == Features
 
@@ -51,7 +51,7 @@ TinkerGraph Kotlin Multiplatform is a complete reimplementation of Apache Tinker
 [source,bash]
 ----
 git clone <repository-url>
-cd tinkergraphs
+cd tinkercat
 pixi install
 ----
 
@@ -60,7 +60,7 @@ pixi install
 [source,kotlin]
 ----
 // Create a graph
-val graph = TinkerGraph.open()
+val graph = TinkerCat.open()
 
 // Add vertices
 val alice = graph.addVertex("name", "Alice", "age", 30)
@@ -125,20 +125,24 @@ pixi run gradle compileKotlinNative
 
 [source]
 ----
-tinkergraphs/
+tinkercat/
 ├── src/
 │   ├── commonMain/kotlin/          # Shared multiplatform code
 │   │   └── org/apache/tinkerpop/gremlin/
 │   │       ├── structure/          # Core TinkerPop interfaces
-│   │       └── tinkergraph/        # TinkerGraph implementation
+│   │       └── tinkercat/        # TinkerCat implementation
 │   ├── jvmMain/kotlin/             # JVM-specific code
 │   ├── jsMain/kotlin/              # JavaScript-specific code
 │   ├── nativeMain/kotlin/          # Native-specific code
 │   └── commonTest/kotlin/          # Shared tests
 ├── docs/
-│   ├── roadmap.adoc               # Development roadmap
-│   ├── provenance.adoc           # Source material references
-│   └── changelog/                # Release notes and summaries
+│   ├── index.adoc                # Documentation home (Diátaxis structure)
+│   ├── tutorials/                # Learning-oriented guides
+│   ├── how-to/                   # Task-oriented guides
+│   ├── reference/                # API and feature reference
+│   ├── explanation/              # Design rationale and background
+│   ├── contributing/             # Contributor guides
+│   └── project/                  # Roadmap and changelog
 ├── build.gradle.kts              # Kotlin multiplatform build
 └── pixi.toml                     # Package management
 ----
@@ -148,7 +152,7 @@ tinkergraphs/
 === Core Components
 
 ==== Graph Elements
-* **TinkerGraph**: Main graph implementation with vertex/edge storage
+* **TinkerCat**: Main graph implementation with vertex/edge storage
 * **TinkerVertex**: Vertex implementation with adjacency lists
 * **TinkerEdge**: Edge implementation with bidirectional references
 * **TinkerVertexProperty**: Vertex property with meta-property support
@@ -156,7 +160,7 @@ tinkergraphs/
 ==== Infrastructure
 * **ElementHelper**: Property validation and manipulation utilities
 * **TinkerIndex**: Generic indexing system for fast property lookups
-* **TinkerGraphVariables**: Graph-level metadata storage
+* **TinkerCatVariables**: Graph-level metadata storage
 * **TinkerElement**: Base class for all graph elements
 
 === Design Principles
@@ -174,14 +178,14 @@ tinkergraphs/
 [source,kotlin]
 ----
 // Empty graph
-val graph = TinkerGraph.open()
+val graph = TinkerCat.open()
 
 // Graph with configuration
 val config = mapOf(
     "gremlin.tinkerGraph.allowNullPropertyValues" to true,
     "gremlin.tinkerGraph.defaultVertexPropertyCardinality" to "list"
 )
-val graph = TinkerGraph.open(config)
+val graph = TinkerCat.open(config)
 ----
 
 === Vertices and Properties
@@ -216,7 +220,7 @@ val charlie = graph.addVertex("name", "Charlie")
 
 // Create edges
 alice.addEdge("knows", bob, "since", 2020)
-alice.addEdge("works_with", charlie, "project", "TinkerGraph")
+alice.addEdge("works_with", charlie, "project", "TinkerCat")
 
 // Traverse outgoing edges
 val outgoingEdges = alice.edges(Direction.OUT).asSequence().toList()
@@ -281,7 +285,7 @@ val results = graph.vertices()
 ----
 # Clone and setup
 git clone <repository-url>
-cd tinkergraphs
+cd tinkercat
 pixi install
 
 # Run tests
@@ -356,4 +360,4 @@ For questions, issues, or contributions:
 
 ---
 
-**TinkerGraph Kotlin Multiplatform** - Bringing graph databases to every platform with the power of Kotlin! 🚀
+**TinkerCat Kotlin Multiplatform** - Bringing graph databases to every platform with the power of Kotlin! 🚀

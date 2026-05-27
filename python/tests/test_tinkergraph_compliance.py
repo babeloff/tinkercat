@@ -28,12 +28,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 try:
-    from tinkergraph import TinkerGraph, Vertex, Edge, T, P, __
-    from tinkergraph.structure import VertexProperty
-    from tinkergraph.process import GraphTraversalSource
+    from tinkercat import TinkerCat, Vertex, Edge, T, P, __
+    from tinkercat.structure import VertexProperty
+    from tinkercat.process import GraphTraversalSource
 except ImportError:
     # Fallback for when Python bindings are not yet available
-    class MockTinkerGraph:
+    class MockTinkerCat:
         def __init__(self):
             self._vertices = {}
             self._edges = {}
@@ -91,26 +91,26 @@ except ImportError:
             return self.value
 
     # Use mock implementations for testing
-    TinkerGraph = MockTinkerGraph
+    TinkerCat = MockTinkerCat
 
 
-class TinkerGraphPythonComplianceTest(unittest.TestCase):
+class TinkerCatPythonComplianceTest(unittest.TestCase):
     """
-    Python platform compliance tests for TinkerGraph following Apache TinkerPop Java compliance tests.
+    Python platform compliance tests for TinkerCat following Apache TinkerPop Java compliance tests.
 
-    These tests validate TinkerGraph behavior on Python platform, ensuring compliance
+    These tests validate TinkerCat behavior on Python platform, ensuring compliance
     with Apache TinkerPop specifications. Tests are adapted from upstream Java tests
     while accounting for Python platform specifics including dynamic typing,
     memory management, and Pythonic idioms.
 
     Task 4.1.2 Phase 3 - Python Platform Compliance Testing
 
-    Author: TinkerGraphs Compliance Framework
+    Author: TinkerCat Compliance Framework
     """
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        self.graph = TinkerGraph.open()
+        self.graph = TinkerCat.open()
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -119,21 +119,21 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
         gc.collect()
 
     def test_basic_graph_creation(self):
-        """Test basic TinkerGraph creation on Python platform."""
-        graph = TinkerGraph.open()
+        """Test basic TinkerCat creation on Python platform."""
+        graph = TinkerCat.open()
         self.assertIsNotNone(graph)
 
         # Test Python-specific graph properties
-        self.assertIsInstance(graph, TinkerGraph)
+        self.assertIsInstance(graph, TinkerCat)
 
         # Verify graph can be created multiple times
-        graph2 = TinkerGraph.open()
+        graph2 = TinkerCat.open()
         self.assertIsNotNone(graph2)
         self.assertIsNot(graph, graph2)
 
     def test_vertex_creation_and_properties(self):
         """Test vertex creation and property operations following Java compliance patterns."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Test vertex creation with properties
         vertex = graph.add_vertex(name="marko", age=29, city="santa fe")
@@ -150,7 +150,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_python_data_type_support(self):
         """Test Python-specific data type support and compliance."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Test Python data types
         vertex = graph.add_vertex(
@@ -175,7 +175,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_edge_creation_and_traversal(self):
         """Test edge creation and basic traversal operations."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
         g = graph.traversal()
 
         # Create the modern graph structure
@@ -241,7 +241,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_exception_handling_python(self):
         """Test Python exception handling compliance."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
         vertex = graph.add_vertex(name="test")
 
         # Test KeyError for nonexistent properties
@@ -258,7 +258,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_memory_management_python(self):
         """Test Python memory management and garbage collection compliance."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Create many vertices to test memory management
         vertices = []
@@ -277,7 +277,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_pythonic_property_access(self):
         """Test Python-style property access patterns."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
         vertex = graph.add_vertex(name="marko", age=29)
 
         # Test dictionary-style access if supported
@@ -301,7 +301,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
     def test_python_context_manager(self):
         """Test Python context manager support if available."""
         try:
-            with TinkerGraph.open() as graph:
+            with TinkerCat.open() as graph:
                 vertex = graph.add_vertex(name="context_test")
                 self.assertIsNotNone(vertex)
                 self.assertEqual("context_test", vertex.value("name"))
@@ -311,7 +311,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_performance_baseline_python(self):
         """Test performance baseline on Python platform."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         start_time = time.time()
 
@@ -333,7 +333,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_unicode_and_encoding_support(self):
         """Test Unicode and encoding support on Python platform."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Test various Unicode strings
         vertex = graph.add_vertex(
@@ -354,7 +354,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def test_serialization_compatibility(self):
         """Test serialization compatibility with Python pickle and JSON."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
         vertex = graph.add_vertex(name="serialization_test", data={"key": "value"})
 
         # Test basic serialization support
@@ -386,7 +386,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
 
     def _create_modern_graph(self):
         """Helper method to create the modern graph structure."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Create vertices
         marko = graph.add_vertex(id=1, label="person", name="marko", age=29)
@@ -407,7 +407,7 @@ class TinkerGraphPythonComplianceTest(unittest.TestCase):
         return graph
 
 
-class TinkerGraphPythonProcessComplianceTest(unittest.TestCase):
+class TinkerCatPythonProcessComplianceTest(unittest.TestCase):
     """
     Python platform Process API compliance tests following Apache TinkerPop specifications.
     """
@@ -459,7 +459,7 @@ class TinkerGraphPythonProcessComplianceTest(unittest.TestCase):
 
     def _create_modern_graph(self):
         """Helper method to create the modern graph structure."""
-        graph = TinkerGraph.open()
+        graph = TinkerCat.open()
 
         # Create vertices
         marko = graph.add_vertex(id=1, label="person", name="marko", age=29)
@@ -482,7 +482,7 @@ class TinkerGraphPythonProcessComplianceTest(unittest.TestCase):
 
 if __name__ == '__main__':
     # Initialize Python platform specific configurations
-    print("TinkerGraph Python Compliance Tests initialized")
+    print("TinkerCat Python Compliance Tests initialized")
     print(f"Python version: {sys.version}")
     print(f"Platform: {sys.platform}")
 

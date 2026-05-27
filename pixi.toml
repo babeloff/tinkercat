@@ -1,7 +1,7 @@
 [workspace]
 authors = ["Fredrick Eisele <fred.eisele@vanderbilt.edu>"]
-channels = ["http://localhost:19000/pixi-local/meso-forge", "https://prefix.dev/meso-forge", "conda-forge"]
-name = "tinkergraphs"
+channels = ["https://prefix.dev/meso-forge", "conda-forge"]
+name = "tinkercat"
 platforms = ["linux-64"]
 version = "0.1.0"
 
@@ -13,7 +13,7 @@ cmd = "gradle tasks"
 [tasks.gradle]
 cmd = "gradle"
 
-# Build the entire TinkerGraph project (compile all targets and run tests)
+# Build the entire TinkerCat project (compile all targets and run tests)
 [tasks.build]
 cmd = "gradle build"
 
@@ -71,12 +71,15 @@ cmd = "echo 'Available test commands:' && echo '  pixi run test               - 
 cmd = "gradle clean"
 
 [dependencies]
-gradle = "9.0.*"
-openjdk = "23.0.*"
-kotlin = "2.2.*"
-ruby = ">=3.0"
-python = ">=3.8"
-pip = "*"
+gradle = "9.*"
+openjdk = "23.*"
+kotlin = "2.3.*"
+ruby = ">=4.0"
+python = ">=3.14"
+pip = ">=26"
+hatchling = ">=1.29"
+rattler-build = ">=0.65"
+nushell = ">=0.109"
 
 # Documentation generation tasks
 [tasks.docs]
@@ -130,7 +133,7 @@ description = "Complete Python integration build and test pipeline"
 
 # Python development test (for interactive testing)
 [tasks.python-dev]
-cmd = "python -c \"from tinkergraphs import TinkerGraph; print('TinkerGraph Python bindings loaded successfully')\""
+cmd = "python -c \"from tinkercat import TinkerCat; print('TinkerCat Python bindings loaded successfully')\""
 description = "Test Python bindings import"
 
 # Platform demonstration tasks
@@ -150,29 +153,20 @@ description = "Run JavaScript platform demonstration in Node.js environment"
 cmd = "gradle runNativeDemo"
 description = "Run Native platform demonstration showcasing native performance optimizations"
 
-# Compliance deviation analysis tasks
+# Compliance deviation analysis
+# Default: AsciiDoc report in build/reports/compliance/
+# Options (passed after --):
+#   --format html|json     alternative output format
+#   --download             pull fresh upstream tests before analysis
+#   --output <file>        explicit output path
+[tasks.compliance]
+cmd = "nu pixi-scripts/compliance_deviation_analysis.nu"
+description = "Analyze TinkerPop compliance deviations (default: AsciiDoc report; pass -- --format html|json or -- --download)"
 
-# Run compliance deviation analysis with AsciiDoc report
-[tasks.compliance-deviation]
-cmd = "python pixi-scripts/compliance_deviation_analysis.py --format adoc"
-description = "Analyze deviations between upstream TinkerPop and local compliance tests (AsciiDoc report)"
-
-# Run compliance deviation analysis with HTML report
-[tasks.compliance-deviation-html]
-cmd = "python pixi-scripts/compliance_deviation_analysis.py --format html"
-description = "Analyze deviations between upstream TinkerPop and local compliance tests (HTML report)"
-
-# Run compliance deviation analysis with JSON report
-[tasks.compliance-deviation-json]
-cmd = "python pixi-scripts/compliance_deviation_analysis.py --format json"
-description = "Analyze deviations between upstream TinkerPop and local compliance tests (JSON report)"
-
-# Run compliance deviation analysis with fresh upstream download
-[tasks.compliance-deviation-fresh]
-cmd = "python pixi-scripts/compliance_deviation_analysis.py --download --format adoc"
-description = "Download fresh upstream tests and analyze compliance deviations"
-
-# Generate all compliance deviation report formats
-[tasks.compliance-deviation-all]
-cmd = "python pixi-scripts/compliance_deviation_analysis.py --format adoc && python pixi-scripts/compliance_deviation_analysis.py --format html && python pixi-scripts/compliance_deviation_analysis.py --format json"
-description = "Generate compliance deviation reports in all formats (AsciiDoc, HTML, JSON)"
+# Conda package building with rattler-build
+# Builds all outputs in recipes/recipe.yaml in one invocation.
+# Options (passed after --):
+#   --output-dir <path>   override the output directory (default: build/conda-packages)
+[tasks.package]
+cmd = "nu pixi-scripts/package-build.nu"
+description = "Build all conda packages from recipes/recipe.yaml (pass -- --output-dir <path> to override output location)"

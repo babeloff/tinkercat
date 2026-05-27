@@ -36,6 +36,19 @@ kotlin {
     // JVM target
     jvm {
         testRuns.named("test") { executionTask.configure { useJUnitPlatform() } }
+        compilations.create("compliance") {
+            defaultSourceSet {
+                dependencies {
+                    implementation(libs.junit.jupiter)
+                    implementation(libs.kotest.runner.junit5)
+                    implementation(libs.kotest.assertions.core)
+                    implementation(libs.kotest.property)
+                    implementation(libs.tinkerpop.gremlin.core)
+                    implementation(libs.tinkerpop.tinkercat.gremlin)
+                    implementation(libs.tinkerpop.gremlin.groovy)
+                }
+            }
+        }
     }
 
     // JavaScript target
@@ -61,7 +74,6 @@ kotlin {
                 compilerOptions {
                     freeCompilerArgs.addAll(listOf(
                         "-Xir-generate-inline-anonymous-functions",
-                        "-Xir-per-module-output-name=tinkergraphs",
                         "-Xgenerate-dts"
                     ))
                 }
@@ -71,23 +83,23 @@ kotlin {
 
     // Native targets - use a more robust approach
     when (val hostOs = System.getProperty("os.name").lowercase()) {
-        "mac os x", "macos" -> macosX64("native") {
+        "mac os x", "macos" -> macosArm64("native") {
             binaries {
                 sharedLib {
-                    baseName = "tinkergraphs"
+                    baseName = "tinkercat"
                 }
                 executable {
-                    entryPoint = "org.apache.tinkerpop.gremlin.tinkergraph.platform.main"
+                    entryPoint = "org.apache.tinkerpop.gremlin.tinkercat.platform.main"
                 }
             }
         }
         "linux" -> linuxX64("native") {
             binaries {
                 sharedLib {
-                    baseName = "tinkergraphs"
+                    baseName = "tinkercat"
                 }
                 executable {
-                    entryPoint = "org.apache.tinkerpop.gremlin.tinkergraph.platform.main"
+                    entryPoint = "org.apache.tinkerpop.gremlin.tinkercat.platform.main"
                 }
             }
         }
@@ -96,20 +108,20 @@ kotlin {
                     hostOs.startsWith("windows") -> mingwX64("native") {
                         binaries {
                             sharedLib {
-                                baseName = "tinkergraphs"
+                                baseName = "tinkercat"
                             }
                             executable {
-                                entryPoint = "org.apache.tinkerpop.gremlin.tinkergraph.platform.main"
+                                entryPoint = "org.apache.tinkerpop.gremlin.tinkercat.platform.main"
                             }
                         }
                     }
-                    hostOs.startsWith("mac") -> macosX64("native") {
+                    hostOs.startsWith("mac") -> macosArm64("native") {
                         binaries {
                             sharedLib {
-                                baseName = "tinkergraphs"
+                                baseName = "tinkercat"
                             }
                             executable {
-                                entryPoint = "org.apache.tinkerpop.gremlin.tinkergraph.platform.main"
+                                entryPoint = "org.apache.tinkerpop.gremlin.tinkercat.platform.main"
                             }
                         }
                     }
@@ -142,7 +154,7 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.tinkerpop.gremlin.core)
-                implementation(libs.tinkerpop.tinkergraph.gremlin)
+                implementation(libs.tinkerpop.tinkercat.gremlin)
                 implementation(libs.tinkerpop.gremlin.groovy)
             }
         }
@@ -152,20 +164,6 @@ kotlin {
                 implementation(libs.kotest.runner.junit5)
                 implementation(libs.kotest.assertions.core)
                 implementation(libs.kotest.property)
-            }
-        }
-
-        // JVM Compliance test source set
-        val jvmCompliance by creating {
-            dependsOn(jvmMain)
-            dependencies {
-                implementation(libs.junit.jupiter)
-                implementation(libs.kotest.runner.junit5)
-                implementation(libs.kotest.assertions.core)
-                implementation(libs.kotest.property)
-                implementation(libs.tinkerpop.gremlin.core)
-                implementation(libs.tinkerpop.tinkergraph.gremlin)
-                implementation(libs.tinkerpop.gremlin.groovy)
             }
         }
 
@@ -226,9 +224,9 @@ publishing {
             from(components["kotlin"])
 
             pom {
-                name.set("TinkerGraph Kotlin Multiplatform")
+                name.set("TinkerCat Kotlin Multiplatform")
                 description.set(
-                        "A Kotlin multiplatform implementation of Apache TinkerPop's TinkerGraph"
+                        "A Kotlin multiplatform implementation of Apache TinkerPop's TinkerCat"
                 )
                 url.set("https://github.com/apache/tinkerpop")
 
@@ -262,14 +260,14 @@ tasks.register<Exec>("runNativeDemo") {
     group = "demo"
     description = "Run native platform demonstration"
     dependsOn("linkReleaseExecutableNative")
-    commandLine("./build/bin/native/releaseExecutable/tinkergraphs.kexe")
+    commandLine("./build/bin/native/releaseExecutable/tinkercat.kexe")
 }
 
 tasks.register<JavaExec>("runJvmDemo") {
     group = "demo"
     description = "Run JVM platform demonstration"
     dependsOn("jvmMainClasses")
-    mainClass.set("org.apache.tinkerpop.gremlin.tinkergraph.platform.JvmPlatformDemoKt")
+    mainClass.set("org.apache.tinkerpop.gremlin.tinkercat.platform.JvmPlatformDemoKt")
     classpath = configurations.getByName("jvmRuntimeClasspath") + kotlin.targets.getByName("jvm").compilations.getByName("main").output.classesDirs
 }
 
@@ -277,18 +275,22 @@ tasks.register<Exec>("runJsNodeDemo") {
     group = "demo"
     description = "Run JavaScript platform demonstration in Node.js"
     dependsOn("jsNodeProductionLibraryDistribution")
-    commandLine("node", "build/dist/js/productionLibrary/tinkergraphs.js")
+    commandLine("node", "build/dist/js/productionLibrary/tinkercat.js")
 }
 
 // Documentation generation tasks
 tasks.register("generateDocs") {
     group = "documentation"
     description = "Generate KDoc documentation"
-    dependsOn("dokkaHtml")
+    dependsOn("dokkaGeneratePublicationHtml")
 }
 
-// Configure Dokka for KDoc generation
-tasks.named("dokkaHtml") { doFirst { mkdir("build/docs/kdoc") } }
+// Dokka V2 configuration
+dokka {
+    dokkaPublications.html {
+        outputDirectory.set(layout.buildDirectory.dir("docs/kdoc"))
+    }
+}
 
 // Phase 3: CI/CD Integration & Validation Tasks
 // Task 4.1.2 Phase 3 Implementation
@@ -383,7 +385,7 @@ tasks.register("generateComplianceReport") {
 **Status:** ✅ COMPLIANT
 
 ## Executive Summary
-TinkerGraphs demonstrates full compliance with Apache TinkerPop specifications.
+TinkerCat demonstrates full compliance with Apache TinkerPop specifications.
 
 ## Compliance Metrics
 - **Total Test Count:** 360+ tests
@@ -411,10 +413,10 @@ TinkerGraphs demonstrates full compliance with Apache TinkerPop specifications.
 - ✅ Adaptation documentation complete
 
 ## Certification
-This report certifies that TinkerGraphs meets Apache TinkerPop compliance standards
+This report certifies that TinkerCat meets Apache TinkerPop compliance standards
 and is suitable for production use as a TinkerPop-compatible graph database.
 
-**Certified by:** TinkerGraphs Compliance Framework v1.0
+**Certified by:** TinkerCat Compliance Framework v1.0
         """.trimIndent()
 
         reportFile.get().asFile.writeText(content)
@@ -456,7 +458,7 @@ tasks.register("javaComplianceTests") {
     doLast {
         println("✅ Java compliance tests completed")
         println("📊 JVM Platform: TinkerPop compliant")
-        println("ℹ️  SimpleTinkerGraphJavaTest demonstrates core compliance patterns")
+        println("ℹ️  SimpleTinkerCatJavaTest demonstrates core compliance patterns")
     }
 }
 
@@ -468,14 +470,14 @@ tasks.register("javascriptComplianceTests") {
     doFirst {
         println("🧪 Running JavaScript compliance tests...")
         println("📁 JavaScript compliance test framework implemented:")
-        println("   - src/jsTest/kotlin/.../TinkerGraphJsTest.kt")
-        println("   - src/jsTest/kotlin/.../TinkerGraphProcessJsTest.kt")
+        println("   - src/jsTest/kotlin/.../TinkerCatJsTest.kt")
+        println("   - src/jsTest/kotlin/.../TinkerCatProcessJsTest.kt")
         println("   - Patterns: Async/Promise support, dynamic typing, browser compatibility")
     }
     doLast {
         println("✅ JavaScript compliance framework completed")
         println("📊 JS Platform: TinkerPop compliance patterns demonstrated")
-        println("ℹ️  Full compilation requires complete Kotlin/JS TinkerGraph implementation")
+        println("ℹ️  Full compilation requires complete Kotlin/JS TinkerCat implementation")
     }
 }
 
@@ -487,13 +489,13 @@ tasks.register("nativeComplianceTests") {
     doFirst {
         println("🧪 Running Native compliance tests...")
         println("📁 Native compliance test framework implemented:")
-        println("   - src/nativeTest/kotlin/.../TinkerGraphNativeTest.kt")
+        println("   - src/nativeTest/kotlin/.../TinkerCatNativeTest.kt")
         println("   - Patterns: Memory management, performance optimization, C interop")
     }
     doLast {
         println("✅ Native compliance framework completed")
         println("📊 Native Platform: TinkerPop compliance patterns demonstrated")
-        println("ℹ️  Full compilation requires complete Kotlin/Native TinkerGraph implementation")
+        println("ℹ️  Full compilation requires complete Kotlin/Native TinkerCat implementation")
     }
 }
 
@@ -502,7 +504,7 @@ tasks.register<Exec>("pythonComplianceTests") {
     group = "compliance"
     description = "Run Python compliance tests following Java compliance patterns"
     workingDir = file("python")
-    commandLine("python", "-m", "pytest", "tests/test_tinkergraph_compliance.py", "-v")
+    commandLine("python", "-m", "pytest", "tests/test_tinkercat_compliance.py", "-v")
 
     doFirst {
         val pythonTestsDir = file("python/tests")
@@ -575,7 +577,7 @@ tasks.register("generatePlatformComplianceReport") {
 **Status:** ✅ ALL PLATFORMS COMPLIANT
 
 ## Executive Summary
-TinkerGraphs demonstrates full compliance with Apache TinkerPop specifications
+TinkerCat demonstrates full compliance with Apache TinkerPop specifications
 across all target platforms, including non-Kotlin language interfaces.
 
 ## Platform Compliance Status
@@ -641,11 +643,11 @@ across all target platforms, including non-Kotlin language interfaces.
 - ✅ Python: Interpreted language performance acceptable
 
 ## Certification
-This report certifies that TinkerGraphs meets Apache TinkerPop compliance
+This report certifies that TinkerCat meets Apache TinkerPop compliance
 standards across ALL target platforms and is suitable for production use
 as a TinkerPop-compatible graph database in any supported environment.
 
-**Certified by:** TinkerGraphs Phase 3 Compliance Framework v1.0
+**Certified by:** TinkerCat Phase 3 Compliance Framework v1.0
 **Compliance Standard:** Apache TinkerPop 3.7.x
         """.trimIndent()
 
@@ -745,11 +747,11 @@ tasks.register("buildTypeScriptPackage") {
         // Create package.json for npm
         val packageJson = """
         {
-          "name": "tinkergraphs",
+          "name": "tinkercat",
           "version": "1.0.0-SNAPSHOT",
           "description": "Kotlin Multiplatform TinkerPop Graph Database",
-          "main": "tinkergraphs.js",
-          "types": "tinkergraphs.d.ts",
+          "main": "tinkercat.js",
+          "types": "tinkercat.d.ts",
           "files": ["*.js", "*.d.ts"],
           "keywords": ["graph", "database", "tinkerpop", "kotlin"],
           "author": "Apache TinkerPop",

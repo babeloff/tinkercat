@@ -1,33 +1,33 @@
 # JVM Test Structure Documentation
 
-This document explains the organization of JVM-specific tests in the TinkerGraphs Kotlin Multiplatform project.
+This document explains the organization of JVM-specific tests in the TinkerCat Kotlin Multiplatform project.
 
 ## 📁 Directory Structure
 
 ```
 src/jvmTest/
 ├── java/
-│   ├── org/apache/tinkerpop/gremlin/tinkergraph/compliance/
-│   │   ├── SimpleTinkerGraphTest.java                     # Root level basic compliance tests
+│   ├── org/apache/tinkerpop/gremlin/tinkercat/compliance/
+│   │   ├── SimpleTinkerCatTest.java                     # Root level basic compliance tests
 │   │   ├── structure/
-│   │   │   ├── TinkerGraphTest.java                       # Core structure compliance tests
+│   │   │   ├── TinkerCatTest.java                       # Core structure compliance tests
 │   │   │   ├── IdManagerTest.java                         # ID management compliance tests
 │   │   │   └── IoDataGenerationTest.java                  # I/O operations compliance tests
 │   │   ├── process/
-│   │   │   ├── TinkerGraphProcessStandardTest.java        # Standard process compliance tests
+│   │   │   ├── TinkerCatProcessStandardTest.java        # Standard process compliance tests
 │   │   │   └── traversal/
 │   │   │       ├── step/
 │   │   │       │   └── sideEffect/
-│   │   │       │       └── TinkerGraphStepTest.java       # Step execution compliance tests
+│   │   │       │       └── TinkerCatStepTest.java       # Step execution compliance tests
 │   │   │       └── strategy/
 │   │   │           └── optimization/
-│   │   │               └── TinkerGraphCountStrategyTest.java # Count optimization tests
+│   │   │               └── TinkerCatCountStrategyTest.java # Count optimization tests
 │   │   ├── jsr223/
-│   │   │   └── TinkerGraphGremlinLangScriptEngineTest.java # Script engine compliance tests
+│   │   │   └── TinkerCatGremlinLangScriptEngineTest.java # Script engine compliance tests
 │   │   ├── JavaComplianceTests_DEPRECATED.java           # Deprecated monolithic tests
 │   │   └── DECOMPOSITION_NOTES.md                        # Decomposition documentation
 ├── kotlin/
-│   └── org/apache/tinkerpop/gremlin/tinkergraph/         # Custom Kotlin tests
+│   └── org/apache/tinkerpop/gremlin/tinkercat/         # Custom Kotlin tests
 │       ├── compliance/                                    # Kotlin compliance test implementations
 │       └── structure/                                     # Custom structure tests
 └── resources/                                             # Test resources
@@ -38,13 +38,13 @@ src/jvmTest/
 ### **Java Tests (`java/`)**
 
 #### **Custom Compliance Tests** - **MOVED TO DEDICATED SOURCE SET** ✅
-- **Previous Location**: `java/org/apache/tinkerpop/gremlin/tinkergraph/compliance/` (MOVED)  
-- **New Location**: `../jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkergraph/` 
+- **Previous Location**: `java/org/apache/tinkerpop/gremlin/tinkercat/compliance/` (MOVED)  
+- **New Location**: `../jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkercat/` 
 - **Purpose**: Complete Apache TinkerPop compliance validation in dedicated source set
 - **Status**: **Refactored to `src/jvmCompliance/`** for better separation of concerns
 
 **See**: `../jvmCompliance/README.md` for complete compliance test documentation
-- **Source**: https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/test/java
+- **Source**: https://github.com/apache/tinkerpop/tree/master/tinkercat-gremlin/src/test/java
 
 **Key Reference Test Areas:**
 - **Structure Tests**: Core graph structure API compliance
@@ -55,7 +55,7 @@ src/jvmTest/
 ### **Kotlin Tests (`kotlin/`)**
 
 #### **Compliance Tests**
-- **Location**: `kotlin/org/apache/tinkerpop/gremlin/tinkergraph/compliance/`
+- **Location**: `kotlin/org/apache/tinkerpop/gremlin/tinkercat/compliance/`
 - **Purpose**: Kotlin-specific compliance tests for multiplatform validation
 - **Language**: Kotlin
 - **Framework**: Kotest
@@ -63,8 +63,8 @@ src/jvmTest/
 - **Count**: ~6 test classes (40+ methods)
 
 #### **Custom Structure Tests**
-- **Location**: `kotlin/org/apache/tinkerpop/gremlin/tinkergraph/structure/`
-- **Purpose**: TinkerGraphs-specific functionality tests
+- **Location**: `kotlin/org/apache/tinkerpop/gremlin/tinkercat/structure/`
+- **Purpose**: TinkerCat-specific functionality tests
 - **Language**: Kotlin  
 - **Framework**: Kotest
 - **Focus**: Advanced indexing, property management, platform-specific features
@@ -98,23 +98,23 @@ gradle jvmTest
 ### **Java Compliance Tests Only**
 ```bash
 # All compliance tests
-gradle test --tests "org.apache.tinkerpop.gremlin.tinkergraph.compliance.*"
+gradle test --tests "org.apache.tinkerpop.gremlin.tinkercat.compliance.*"
 
 # Root level basic tests
-gradle jvmTest --tests "SimpleTinkerGraphTest"
+gradle jvmTest --tests "SimpleTinkerCatTest"
 
 # Structure API tests
-gradle jvmTest --tests "TinkerGraphTest"                    # Core structure
+gradle jvmTest --tests "TinkerCatTest"                    # Core structure
 gradle jvmTest --tests "IdManagerTest"                      # ID management
 gradle jvmTest --tests "IoDataGenerationTest"               # I/O operations
 
 # Process API tests  
-gradle jvmTest --tests "TinkerGraphProcessStandardTest"     # Standard process
-gradle jvmTest --tests "TinkerGraphStepTest"                # Step execution
-gradle jvmTest --tests "TinkerGraphCountStrategyTest"       # Optimization
+gradle jvmTest --tests "TinkerCatProcessStandardTest"     # Standard process
+gradle jvmTest --tests "TinkerCatStepTest"                # Step execution
+gradle jvmTest --tests "TinkerCatCountStrategyTest"       # Optimization
 
 # JSR223 scripting tests
-gradle jvmTest --tests "TinkerGraphGremlinLangScriptEngineTest"
+gradle jvmTest --tests "TinkerCatGremlinLangScriptEngineTest"
 ```
 
 ### **Kotlin Compliance Tests Only**
@@ -134,12 +134,12 @@ pixi run compliance-deviation-json   # Generate JSON report
 ### **Adding New Compliance Tests**
 **Use the dedicated compliance source set**: `../jvmCompliance/`
 
-1. **JVM Compliance**: Add to `../jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkergraph/[subdir]/`
+1. **JVM Compliance**: Add to `../jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkercat/[subdir]/`
 2. **Structure tests**: `../jvmCompliance/java/.../structure/`
 3. **Process tests**: `../jvmCompliance/java/.../process/traversal/`
 4. **Execution**: `./gradlew jvmComplianceTest`
 5. **Documentation**: See `../jvmCompliance/README.md`
-6. **Scripting tests**: Add to `java/org/apache/tinkerpop/gremlin/tinkergraph/compliance/jsr223/`
+6. **Scripting tests**: Add to `java/org/apache/tinkerpop/gremlin/tinkercat/compliance/jsr223/`
 7. **Reference tests**: Add to `java/tinkerpop-reference/` (maintain upstream structure)
 8. **Use JUnit Jupiter**: `@Test`, `@BeforeEach`, `@AfterEach`, `@DisplayName`
 9. **Follow Apache TinkerPop naming**: Use `should*` method naming convention
@@ -193,18 +193,18 @@ The roadmap for achieving comprehensive TinkerPop compliance is documented in:
 ```
 JavaComplianceTests.java (DEPRECATED)
 └── Decomposed to exact tinkerpop-reference structure:
-    ├── SimpleTinkerGraphTest.java (11 basic compliance tests)
+    ├── SimpleTinkerCatTest.java (11 basic compliance tests)
     ├── structure/
-    │   ├── TinkerGraphTest.java (7 core structure tests)
+    │   ├── TinkerCatTest.java (7 core structure tests)
     │   ├── IdManagerTest.java (9 ID management tests)  
     │   └── IoDataGenerationTest.java (10 I/O tests)
     ├── process/
-    │   ├── TinkerGraphProcessStandardTest.java (6 process tests)
+    │   ├── TinkerCatProcessStandardTest.java (6 process tests)
     │   └── traversal/
-    │       ├── step/sideEffect/TinkerGraphStepTest.java (6 step tests)
-    │       └── strategy/optimization/TinkerGraphCountStrategyTest.java (6 optimization tests)
+    │       ├── step/sideEffect/TinkerCatStepTest.java (6 step tests)
+    │       └── strategy/optimization/TinkerCatCountStrategyTest.java (6 optimization tests)
     └── jsr223/
-        └── TinkerGraphGremlinLangScriptEngineTest.java (6 scripting tests)
+        └── TinkerCatGremlinLangScriptEngineTest.java (6 scripting tests)
 
 Result: 55 tests in 7 classes with exact Apache TinkerPop reference structure matching
 ```
@@ -212,6 +212,6 @@ Result: 55 tests in 7 classes with exact Apache TinkerPop reference structure ma
 ---
 
 **Last Updated**: September 2024  
-**Maintainer**: TinkerGraphs Development Team  
+**Maintainer**: TinkerCat Development Team  
 **Major Change**: JavaComplianceTests complete decomposition to exact tinkerpop-reference structure achieved  
 **Achievement**: 7 specialized classes, 55 tests, 100% structure matching with upstream Apache TinkerPop

@@ -1,6 +1,6 @@
 # JVM Compliance Test Suite
 
-This directory contains the complete Apache TinkerPop compliance test suite for the JVM target, providing comprehensive validation of TinkerGraph implementation conformance.
+This directory contains the complete Apache TinkerPop compliance test suite for the JVM target, providing comprehensive validation of TinkerCat implementation conformance.
 
 ## Overview
 
@@ -14,7 +14,7 @@ The `jvmCompliance` source set is a dedicated test environment for Apache Tinker
 ## Directory Structure
 
 ```
-src/jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkergraph/
+src/jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkercat/
 ├── *.java                                 # Root-level compliance tests (15 files)
 ├── jsr223/                                # JSR-223 scripting compliance (1 file)
 ├── process/                               # Process API compliance (7 files)
@@ -57,7 +57,7 @@ src/jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkergraph/
 - JSR-223 integration validation
 
 #### **Root Level Tests**
-- Basic TinkerGraph functionality
+- Basic TinkerCat functionality
 - Provider implementations
 - Feature flag testing
 - UUID handling
@@ -84,7 +84,7 @@ src/jvmCompliance/java/org/apache/tinkerpop/gremlin/tinkergraph/
 
 ### **Individual Test Classes**
 ```bash
-./gradlew jvmComplianceTest --tests "TinkerGraphTest"
+./gradlew jvmComplianceTest --tests "TinkerCatTest"
 ./gradlew jvmComplianceTest --tests "*Provider*"
 ```
 
@@ -105,7 +105,7 @@ The compliance tests are configured with:
 - **Skipped Tests**: Tests disabled with `@Disabled` annotation
 
 ### **Common Modifications**
-Some tests may need customization for your TinkerGraph implementation:
+Some tests may need customization for your TinkerCat implementation:
 
 ```java
 @Disabled("Custom implementation variation")
@@ -119,7 +119,7 @@ public void testSpecificBehavior() {
 
 The compliance tests have access to:
 - **Apache TinkerPop Core**: Full gremlin-core API
-- **TinkerGraph Implementation**: Your tinkergraph-gremlin implementation
+- **TinkerCat Implementation**: Your tinkercat-gremlin implementation
 - **Groovy Support**: For Gremlin-Groovy integration
 - **JUnit 5**: Modern testing framework
 - **Kotest**: Additional assertion libraries
@@ -129,7 +129,7 @@ The compliance tests have access to:
 ### **Adding New Compliance Tests**
 1. Place new tests in appropriate subdirectory structure
 2. Follow Apache TinkerPop naming conventions
-3. Use package: `org.apache.tinkerpop.gremlin.tinkergraph[.subdirs]`
+3. Use package: `org.apache.tinkerpop.gremlin.tinkercat[.subdirs]`
 4. Integrate with existing test providers
 
 ### **Updating from Upstream**

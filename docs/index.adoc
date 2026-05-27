@@ -1,0 +1,57 @@
+= TinkerCat Documentation
+:toc: left
+:toclevels: 2
+:icons: font
+
+TinkerCat is a Kotlin Multiplatform implementation of the Apache TinkerPop in-memory graph database,
+targeting JVM, JavaScript, and Native platforms from a single shared codebase.
+
+This documentation is organised using the https://diataxis.fr[Diátaxis] framework.
+Choose the section that matches what you are trying to do.
+
+== Tutorials — learning by doing
+
+New to TinkerCat?
+Tutorials take you step-by-step through a complete task so you build real understanding as you work.
+
+* xref:tutorials/getting-started.adoc[Getting Started] — install TinkerCat, build your first graph, and run a traversal.
+
+== How-to guides — solving a specific problem
+
+Already know the basics and need to accomplish something concrete?
+How-to guides focus on the goal, not the background.
+
+* xref:how-to/migrate-from-java.adoc[Migrate from Java TinkerCat] — port an existing project to TinkerCat.
+
+== Reference — technical descriptions
+
+Precise, complete descriptions of the API and built-in features.
+Consult these when you need to know exactly what a method does or what options are available.
+
+* xref:reference/api.adoc[API Reference] — all graph, vertex, edge, and property operations across all platforms.
+* xref:reference/algorithms.adoc[Graph Algorithms] — shortest path, topological sort, strongly connected components, and more.
+* xref:reference/indexing.adoc[Advanced Property Indexing] — composite indices, range queries, and query planning.
+* xref:reference/multi-property.adoc[Multi-Property and Meta-Property Support] — cardinality types and the PropertyManager API.
+
+== Explanation — background and design rationale
+
+Explanations give you the conceptual context needed to understand *why* TinkerCat works the way it does.
+
+* xref:explanation/liberal-parameters.adoc[Liberal Parameters] — why API methods accept broad input types and handle casting internally.
+* xref:explanation/provenance.adoc[Provenance] — the source materials and prior art that shaped TinkerCat' design.
+
+== Contributing
+
+Guides for developers working on TinkerCat itself.
+
+* xref:contributing/compliance-testing.adoc[Compliance Testing] — how to add TinkerPop compliance tests with provenance tracking.
+* xref:contributing/compliance-analysis.adoc[Compliance Deviation Analysis] — how to use the deviation analysis tool.
+* xref:contributing/deploy-docs.adoc[Deploy the Documentation Site] — how to configure GitHub Pages for this project.
+* xref:contributing/style-guide.adoc[AsciiDoc Style Guide] — formatting rules for all documentation.
+
+== Project
+
+Internal planning and change history — not part of the user-facing documentation.
+
+* xref:project/roadmap.adoc[Roadmap] — development phases, current status, and future work.
+* xref:project/changelog/[Changelog] — per-task implementation notes.

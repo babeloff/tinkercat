@@ -1,0 +1,167 @@
+schema_version: 1
+
+# conda_version  — the conda package version (from pixi.toml)
+# gradle_version — the version string in build.gradle.kts, used in artifact filenames
+context:
+  conda_version: "0.1.0"
+  gradle_version: "1.0.0-SNAPSHOT"
+
+recipe:
+  name: tinkercat
+  version: ${{ conda_version }}
+
+# Source is the project root, one level above the recipes/ directory.
+source:
+  - path: ../
+
+outputs:
+
+  # ── JVM library (noarch: platform-independent JAR) ─────────────────────
+  - package:
+      name: tinkercat-jvm
+      version: ${{ conda_version }}
+    build:
+      noarch: generic
+      number: 0
+      script:
+        - gradle jvmJar
+        - mkdir -p ${PREFIX}/share/java/tinkercat
+        - cp build/libs/tinkercat-jvm-${{ gradle_version }}.jar ${PREFIX}/share/java/tinkercat/tinkercat-jvm.jar
+    requirements:
+      host:
+        - gradle >=9,<10
+        - openjdk >=23,<24
+      run:
+        - openjdk >=23
+    tests:
+      - script:
+          - test -f ${PREFIX}/share/java/tinkercat/tinkercat-jvm.jar
+          - unzip -t ${PREFIX}/share/java/tinkercat/tinkercat-jvm.jar > /dev/null
+    about:
+      summary: TinkerCat Kotlin Multiplatform — JVM library (JAR)
+      description: >
+        An in-memory property graph database implementing the Apache TinkerPop
+        Graph API, compiled for the JVM. Drop the JAR on any classpath to use
+        TinkerCat from Kotlin, Java, Groovy, or any other JVM language.
+      license: Apache-2.0
+      license_file: LICENSE
+      homepage: https://tinkerpop.apache.org
+
+  # ── JavaScript / TypeScript npm package (noarch) ───────────────────────
+  - package:
+      name: tinkercat-npm
+      version: ${{ conda_version }}
+    build:
+      noarch: generic
+      number: 0
+      # compileProductionExecutableKotlinJs runs DCE and outputs UMD modules to
+      # build/compileSync/js/main/productionExecutable/kotlin/.
+      # tinkercat.js uses relative require() for its bundled deps so all files
+      # in that directory must travel together.
+      script: |
+        gradle compileProductionExecutableKotlinJs
+        mkdir -p ${PREFIX}/lib/node_modules/tinkercat
+        cp build/compileSync/js/main/productionExecutable/kotlin/*.js  ${PREFIX}/lib/node_modules/tinkercat/
+        cp build/compileSync/js/main/productionExecutable/kotlin/*.js.map ${PREFIX}/lib/node_modules/tinkercat/ || true
+        printf '{\n  "name": "tinkercat",\n  "version": "${{ conda_version }}",\n  "main": "tinkercat.js",\n  "description": "TinkerCat Kotlin Multiplatform - JavaScript UMD module"\n}\n' \
+          > ${PREFIX}/lib/node_modules/tinkercat/package.json
+    requirements:
+      host:
+        - gradle >=9,<10
+        - openjdk >=23,<24
+      run:
+        - nodejs >=16
+    tests:
+      - script:
+          - test -f ${PREFIX}/lib/node_modules/tinkercat/tinkercat.js
+          - test -f ${PREFIX}/lib/node_modules/tinkercat/package.json
+          - node --check ${PREFIX}/lib/node_modules/tinkercat/tinkercat.js
+    about:
+      summary: TinkerCat Kotlin Multiplatform — JavaScript UMD module for Node.js
+      description: >
+        An in-memory property graph database implementing the Apache TinkerPop
+        Graph API, compiled to JavaScript via Kotlin/JS (IR, with DCE).
+        Distributed as a UMD module bundle suitable for Node.js applications.
+        All Kotlin runtime dependencies are included alongside tinkercat.js.
+      license: Apache-2.0
+      license_file: LICENSE
+      homepage: https://tinkerpop.apache.org
+
+  # ── Native shared library + executable (linux-64) ──────────────────────
+  - package:
+      name: tinkercat-native
+      version: ${{ conda_version }}
+    build:
+      number: 0
+      # linkReleaseSharedNative  → build/bin/native/releaseShared/
+      #   libtinkercat.so        C-compatible shared library
+      #   libtinkercat_api.h     C header for FFI callers
+      # linkReleaseExecutableNative → build/bin/native/releaseExecutable/
+      #   tinkercat.kexe         standalone native executable
+      script:
+        - gradle linkReleaseSharedNative linkReleaseExecutableNative
+        - mkdir -p ${PREFIX}/lib ${PREFIX}/include ${PREFIX}/bin
+        - cp build/bin/native/releaseShared/libtinkercat.so ${PREFIX}/lib/libtinkercat.so
+        - cp build/bin/native/releaseShared/libtinkercat_api.h ${PREFIX}/include/libtinkercat_api.h
+        - cp build/bin/native/releaseExecutable/tinkercat.kexe ${PREFIX}/bin/tinkercat
+        - chmod 755 ${PREFIX}/bin/tinkercat
+    requirements:
+      host:
+        - gradle >=9,<10
+        - openjdk >=23,<24
+      run:
+        # The .so and .kexe link against libgcc_s.so.1 and libc.
+        # readelf shows a maximum GLIBC_2.12 symbol version requirement.
+        - libgcc-ng >=7
+        - __glibc >=2.12
+    tests:
+      - script:
+          - test -f ${PREFIX}/lib/libtinkercat.so
+          - test -f ${PREFIX}/include/libtinkercat_api.h
+          - test -x ${PREFIX}/bin/tinkercat
+          - nm -D ${PREFIX}/lib/libtinkercat.so | grep -q tinkercat
+    about:
+      summary: TinkerCat Kotlin Multiplatform — Native shared library and executable
+      description: >
+        An in-memory property graph database implementing the Apache TinkerPop
+        Graph API, compiled to native Linux x86-64 code via Kotlin/Native.
+        Provides libtinkercat.so with a C-compatible header for use from C,
+        C++, Python ctypes, or any foreign-function interface, plus a standalone
+        tinkercat executable.
+      license: Apache-2.0
+      license_file: LICENSE
+      homepage: https://tinkerpop.apache.org
+
+  # ── Python ctypes wrapper around the native library (linux-64) ───────────
+  - package:
+      name: tinkercat-python
+      version: ${{ conda_version }}
+    build:
+      number: 0
+      # libtinkercat.so is provided by tinkercat-native at ${PREFIX}/lib/
+      # and resolved at runtime via the conda environment's LD_LIBRARY_PATH.
+      script:
+        - cd python && pip install . --no-deps --no-build-isolation -v
+    requirements:
+      host:
+        - python >=3.8
+        - pip
+        - hatchling
+      run:
+        - python >=3.8
+        - tinkercat-native ==${{ conda_version }}
+    tests:
+      - python:
+          imports:
+            - tinkercat
+      - script:
+          - python -c "from tinkercat import TinkerCat; g = TinkerCat(); print('ok')"
+    about:
+      summary: TinkerCat — Python ctypes bindings for the native library
+      description: >
+        Python bindings for the TinkerCat native shared library, implemented
+        using ctypes. Provides a Pythonic API for the TinkerCat in-memory
+        property graph database. Requires tinkercat-native for libtinkercat.so.
+      license: Apache-2.0
+      license_file: LICENSE
+      homepage: https://tinkerpop.apache.org

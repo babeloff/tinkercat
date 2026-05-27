@@ -1,7 +1,7 @@
 """
-Comprehensive test suite for TinkerGraph Python bindings.
+Comprehensive test suite for TinkerCat Python bindings.
 
-This module contains unit tests and integration tests for the TinkerGraph
+This module contains unit tests and integration tests for the TinkerCat
 Python API, testing graph creation, vertex/edge operations, property handling,
 and error conditions.
 """
@@ -10,43 +10,43 @@ import pytest
 import time
 from typing import List
 
-from tinkergraphs import TinkerGraph, Vertex, Edge
-from tinkergraphs.exceptions import (
-    TinkerGraphError,
-    TinkerGraphVertexError,
-    TinkerGraphEdgeError,
-    TinkerGraphValidationError,
-    TinkerGraphLibraryError
+from tinkercat import TinkerCat, Vertex, Edge
+from tinkercat.exceptions import (
+    TinkerCatError,
+    TinkerCatVertexError,
+    TinkerCatEdgeError,
+    TinkerCatValidationError,
+    TinkerCatLibraryError
 )
 
 
-class TestTinkerGraph:
-    """Test the main TinkerGraph class."""
+class TestTinkerCat:
+    """Test the main TinkerCat class."""
 
     def test_create_graph(self):
         """Test basic graph creation."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         assert graph.vertex_count == 0
         assert graph.edge_count == 0
         assert len(graph) == 0
 
     def test_graph_context_manager(self):
         """Test graph as context manager."""
-        with TinkerGraph() as graph:
+        with TinkerCat() as graph:
             assert graph.vertex_count == 0
             v = graph.add_vertex("test", name="Alice")
             assert graph.vertex_count == 1
 
     def test_graph_string_representations(self):
         """Test string representations of graph."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         str_repr = str(graph)
-        assert "TinkerGraph" in str_repr
+        assert "TinkerCat" in str_repr
         assert "vertices=0" in str_repr
         assert "edges=0" in str_repr
 
         repr_str = repr(graph)
-        assert "TinkerGraph" in repr_str
+        assert "TinkerCat" in repr_str
         assert "0V" in repr_str
         assert "0E" in repr_str
 
@@ -56,7 +56,7 @@ class TestVertex:
 
     def test_add_vertex_no_params(self):
         """Test adding vertex without parameters."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex()
 
         assert graph.vertex_count == 1
@@ -66,7 +66,7 @@ class TestVertex:
 
     def test_add_vertex_with_id(self):
         """Test adding vertex with explicit ID."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex(vertex_id="user123")
 
         assert graph.vertex_count == 1
@@ -74,7 +74,7 @@ class TestVertex:
 
     def test_add_vertex_with_label(self):
         """Test adding vertex with label."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex("person")
 
         assert graph.vertex_count == 1
@@ -82,7 +82,7 @@ class TestVertex:
 
     def test_add_vertex_with_properties(self):
         """Test adding vertex with properties."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex("person", name="Alice", age=30, active=True)
 
         assert graph.vertex_count == 1
@@ -92,7 +92,7 @@ class TestVertex:
 
     def test_vertex_property_operations(self):
         """Test vertex property get/set operations."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex("person", name="Alice", age=30)
 
         # Test get_property
@@ -111,17 +111,17 @@ class TestVertex:
 
     def test_vertex_validation_errors(self):
         """Test vertex validation errors."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph.add_vertex(label=123)  # Invalid label type
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph.add_vertex(vertex_id=456)  # Invalid ID type
 
     def test_vertex_equality_and_hashing(self):
         """Test vertex equality and hashing."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         v1 = graph.add_vertex("person", vertex_id="alice")
         v2 = graph.add_vertex("person", vertex_id="bob")
         v3 = graph.get_vertex("alice")
@@ -133,7 +133,7 @@ class TestVertex:
 
     def test_vertex_string_representations(self):
         """Test vertex string representations."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex("person", vertex_id="alice", name="Alice", age=30)
 
         str_repr = str(vertex)
@@ -150,7 +150,7 @@ class TestEdge:
 
     def test_add_edge_basic(self):
         """Test basic edge creation."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", vertex_id="alice", name="Alice")
         bob = graph.add_vertex("person", vertex_id="bob", name="Bob")
 
@@ -163,7 +163,7 @@ class TestEdge:
 
     def test_add_edge_with_properties(self):
         """Test edge creation with properties."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
 
@@ -175,7 +175,7 @@ class TestEdge:
 
     def test_edge_property_operations(self):
         """Test edge property operations."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         edge = graph.add_edge("knows", alice, bob, since=2018)
@@ -191,22 +191,22 @@ class TestEdge:
 
     def test_edge_validation_errors(self):
         """Test edge validation errors."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph.add_edge(123, alice, bob)  # Invalid label type
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph.add_edge("knows", "not_vertex", bob)  # Invalid vertex type
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph.add_edge("knows", alice, "not_vertex")  # Invalid vertex type
 
     def test_edge_other_vertex(self):
         """Test getting the other vertex of an edge."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         edge = graph.add_edge("knows", alice, bob)
@@ -215,12 +215,12 @@ class TestEdge:
         assert edge.other_vertex(bob) == alice
 
         charlie = graph.add_vertex("person", name="Charlie")
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             edge.other_vertex(charlie)
 
     def test_edge_string_representations(self):
         """Test edge string representations."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", vertex_id="alice", name="Alice")
         bob = graph.add_vertex("person", vertex_id="bob", name="Bob")
         edge = graph.add_edge("knows", alice, bob, since=2018)
@@ -237,7 +237,7 @@ class TestGraphTraversal:
 
     def test_vertex_edges(self):
         """Test vertex edge traversal methods."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         charlie = graph.add_vertex("person", name="Charlie")
@@ -268,7 +268,7 @@ class TestGraphTraversal:
 
     def test_vertex_vertices(self):
         """Test vertex-to-vertex traversal methods."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         charlie = graph.add_vertex("person", name="Charlie")
@@ -298,7 +298,7 @@ class TestGraphQueries:
 
     def test_get_vertices(self):
         """Test getting vertices with and without filters."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice", age=30)
         bob = graph.add_vertex("person", name="Bob", age=25)
         company = graph.add_vertex("organization", name="TechCorp")
@@ -318,7 +318,7 @@ class TestGraphQueries:
 
     def test_get_edges(self):
         """Test getting edges with and without filters."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         charlie = graph.add_vertex("person", name="Charlie")
@@ -337,7 +337,7 @@ class TestGraphQueries:
 
     def test_get_vertex_by_id(self):
         """Test getting vertex by ID."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", vertex_id="alice", name="Alice")
 
         found_vertex = graph.get_vertex("alice")
@@ -352,7 +352,7 @@ class TestGraphModification:
 
     def test_remove_vertex(self):
         """Test vertex removal."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         edge = graph.add_edge("knows", alice, bob)
@@ -367,7 +367,7 @@ class TestGraphModification:
 
     def test_remove_edge(self):
         """Test edge removal."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         edge = graph.add_edge("knows", alice, bob)
@@ -381,7 +381,7 @@ class TestGraphModification:
 
     def test_clear_graph(self):
         """Test clearing the entire graph."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         bob = graph.add_vertex("person", name="Bob")
         graph.add_edge("knows", alice, bob)
@@ -400,32 +400,32 @@ class TestGraphLifecycle:
 
     def test_graph_close(self):
         """Test explicit graph closure."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
 
         assert graph.vertex_count == 1
 
         graph.close()
 
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             graph.add_vertex("person", name="Bob")
 
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             _ = graph.vertex_count
 
     def test_graph_closed_operations(self):
         """Test that operations fail on closed graph."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         alice = graph.add_vertex("person", name="Alice")
         graph.close()
 
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             graph.add_vertex("person", name="Bob")
 
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             graph.add_edge("knows", alice, alice)
 
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             graph.vertices()
 
 
@@ -434,7 +434,7 @@ class TestPerformance:
 
     def test_large_graph_creation(self):
         """Test creating a graph with many vertices and edges."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex_count = 1000
 
         # Add vertices
@@ -463,7 +463,7 @@ class TestPerformance:
 
     def test_graph_traversal_performance(self):
         """Test performance of graph traversal operations."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
 
         # Create a star topology (one central vertex connected to many others)
         central = graph.add_vertex("hub", name="Central")
@@ -489,26 +489,26 @@ class TestErrorHandling:
 
     def test_cross_graph_edge_creation(self):
         """Test that edges cannot be created between vertices from different graphs."""
-        graph1 = TinkerGraph()
-        graph2 = TinkerGraph()
+        graph1 = TinkerCat()
+        graph2 = TinkerCat()
 
         alice = graph1.add_vertex("person", name="Alice")
         bob = graph2.add_vertex("person", name="Bob")
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             graph1.add_edge("knows", alice, bob)
 
     def test_property_validation(self):
         """Test property validation."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
         vertex = graph.add_vertex("person", name="Alice")
 
-        with pytest.raises(TinkerGraphValidationError):
+        with pytest.raises(TinkerCatValidationError):
             vertex.set_property(123, "value")  # Invalid property key type
 
     def test_memory_cleanup(self):
         """Test that resources are cleaned up properly."""
-        graph = TinkerGraph()
+        graph = TinkerCat()
 
         # Create many vertices and edges
         vertices = []
@@ -523,12 +523,12 @@ class TestErrorHandling:
         graph.close()
 
         # Graph should be marked as closed
-        with pytest.raises(TinkerGraphError):
+        with pytest.raises(TinkerCatError):
             graph.vertex_count
 
 
 if __name__ == "__main__":
     # Run a simple test if executed directly
-    test = TestTinkerGraph()
+    test = TestTinkerCat()
     test.test_create_graph()
     print("Basic test passed!")

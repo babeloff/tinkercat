@@ -1,4 +1,4 @@
-rootProject.name = "tinkergraphs"
+rootProject.name = "tinkercat"
 
 pluginManagement {
     repositories {

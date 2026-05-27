@@ -1,9 +1,9 @@
 """
-Test package for TinkerGraph Python bindings.
+Test package for TinkerCat Python bindings.
 
 This package contains unit tests, integration tests, and performance benchmarks
-for the TinkerGraph Python bindings, ensuring the correctness and reliability
-of the Python interface to the native Kotlin TinkerGraph implementation.
+for the TinkerCat Python bindings, ensuring the correctness and reliability
+of the Python interface to the native Kotlin TinkerCat implementation.
 """
 
 __version__ = "1.0.0"
@@ -24,7 +24,7 @@ def skip_if_no_native_lib():
     def decorator(test_func):
         def wrapper(*args, **kwargs):
             try:
-                from tinkergraphs.bindings import NativeGraphHandle
+                from tinkercat.bindings import NativeGraphHandle
                 # Try to create a handle to verify library is loadable
                 handle = NativeGraphHandle()
                 return test_func(*args, **kwargs)
