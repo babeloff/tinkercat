@@ -1,0 +1,142 @@
+= Task 7.4.6: discard() Step
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: LOW +
+*Estimated Effort*: 2–3 days +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x `discard()` step
+
+`discard()` is a terminal step that consumes the entire traversal, discarding all
+results, but still executing all side-effect steps (e.g., `sideEffect()`, `store()`,
+`aggregate()`, `property()`).
+It is the counterpart to `iterate()`, with a name that explicitly signals intent:
+"I do not want the results."
+
+== Motivation
+
+Prior to `discard()`, a common pattern was:
+
+[source,kotlin]
+----
+g.V().hasLabel("person")
+    .sideEffect { /* update external system */ }
+    .iterate()   // intent not clear — are results expected?
+----
+
+With `discard()`:
+
+[source,kotlin]
+----
+g.V().hasLabel("person")
+    .sideEffect { /* update external system */ }
+    .discard()   // unambiguous: results are intentionally discarded
+----
+
+The difference is semantic, not behavioural.
+Both `iterate()` and `discard()` drain the traversal; `discard()` documents intent
+and may be given special treatment by future strategy optimisations (e.g., skip
+materialising result objects when they will never be used).
+
+== Implementation Plan
+
+=== 1. `DiscardStep`
+
+`discard()` is a terminal step — it drains the traversal and returns `Unit`.
+
+[source,kotlin]
+----
+class DiscardStep<S, E>(private val traversal: GraphTraversal<S, E>) {
+    fun execute() {
+        while (traversal.hasNext()) {
+            traversal.next()
+        }
+    }
+}
+----
+
+=== 2. `GraphTraversal` DSL Method
+
+[source,kotlin]
+----
+fun GraphTraversal<*, *>.discard() {
+    while (hasNext()) next()
+}
+----
+
+`discard()` returns `Unit` (not the traversal), reinforcing that the pipeline is
+terminated and cannot be continued.
+
+=== 3. Interaction with `TinkerCatCountStrategy`
+
+`TinkerCatCountStrategy` (Task 7.5.2) inspects whether the terminal step is a
+`discard()` and, if so, can eliminate `order()` and other non-side-effect steps
+earlier in the pipeline because the order of results is irrelevant when discarded.
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+
+// Bulk property update with no interest in result values
+g.V().hasLabel("person")
+    .property("migrated", true)
+    .discard()
+
+// Side-effect population
+g.V().hasLabel("order")
+    .sideEffect { traverser ->
+        externalAuditLog.record(traverser.get().id())
+    }
+    .discard()
+
+// Drop elements — discard() makes the intent explicit
+g.V().has("status", "deleted")
+    .drop()
+    .discard()
+----
+
+== Relationship to `iterate()`
+
+[cols="1,1,2", options="header"]
+|===
+|Step |Returns |Intended use
+
+|`iterate()`
+|`GraphTraversal<S,E>` (the traversal itself)
+|When you want to retain a reference to the (now-drained) traversal
+
+|`discard()`
+|`Unit`
+|When you explicitly do not need the results and want to document that intent
+|===
+
+== Test Plan
+
+* `DiscardStepTest` in `commonTest`:
+  - `discard()` on an empty traversal completes without error
+  - `discard()` drains a non-empty traversal (graph element count unchanged)
+  - Side-effects inside a discarded traversal still execute
+  - `drop().discard()` removes elements; graph element count decreases
+  - `property(...).discard()` mutation is applied to the graph
+  - `discard()` cannot be chained (returns `Unit`)
+
+== Acceptance Criteria
+
+- [x] `discard()` available as a terminal step on `GraphTraversal`
+- [x] All side-effect steps within the pipeline execute before `discard()` returns
+- [x] `discard()` returns `Unit`, not the traversal
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#discard-step[TinkerPop 3.8.1: discard() step]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.5.2-count-strategy.adoc[Task 7.5.2: TinkerCatCountStrategy]

@@ -1,0 +1,230 @@
+= Task 7.7.2: P Predicate Additions (startingWith, endingWith, containing, regexp)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 3–5 days +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x `P` predicate additions
+
+TinkerPop 3.8.x added four string-matching predicates to the `P` class:
+
+* `P.startingWith(prefix)` — value starts with the given prefix
+* `P.endingWith(suffix)` — value ends with the given suffix
+* `P.containing(substring)` — value contains the substring
+* `P.regexp(pattern)` — value matches the regular expression
+
+These allow string-based filtering directly in `has()` without using lambda steps,
+maintaining full GLV serialisability.
+
+== New Predicates
+
+[cols="2,3,2", options="header"]
+|===
+|Predicate |Equivalent Kotlin expression |Serialisable?
+
+|`P.startingWith("Al")`
+|`value.startsWith("Al")`
+|Yes
+
+|`P.endingWith("son")`
+|`value.endsWith("son")`
+|Yes
+
+|`P.containing("li")`
+|`"li" in value`
+|Yes
+
+|`P.notStartingWith("Al")`
+|`!value.startsWith("Al")`
+|Yes
+
+|`P.notEndingWith("son")`
+|`!value.endsWith("son")`
+|Yes
+
+|`P.notContaining("li")`
+|`"li" !in value`
+|Yes
+
+|`P.regexp("[A-Z][a-z]+")`
+|`Regex("[A-Z][a-z]+").matches(value)`
+|Yes (pattern string is serialised)
+|===
+
+== Implementation Plan
+
+=== 1. `P` Object Extensions
+
+[source,kotlin]
+----
+// In the existing P object (commonMain)
+object P {
+    // ... existing predicates ...
+
+    fun startingWith(prefix: String): P<String>    = StringP(StringBiPredicate.STARTS_WITH, prefix)
+    fun notStartingWith(prefix: String): P<String> = StringP(StringBiPredicate.NOT_STARTS_WITH, prefix)
+    fun endingWith(suffix: String): P<String>      = StringP(StringBiPredicate.ENDS_WITH, suffix)
+    fun notEndingWith(suffix: String): P<String>   = StringP(StringBiPredicate.NOT_ENDS_WITH, suffix)
+    fun containing(substring: String): P<String>   = StringP(StringBiPredicate.CONTAINING, substring)
+    fun notContaining(substring: String): P<String>= StringP(StringBiPredicate.NOT_CONTAINING, substring)
+    fun regexp(pattern: String): P<String>         = StringP(StringBiPredicate.REGEXP, pattern)
+}
+----
+
+=== 2. `StringBiPredicate` Enum
+
+[source,kotlin]
+----
+enum class StringBiPredicate : BiPredicate<String?, String> {
+    STARTS_WITH {
+        override fun test(value: String?, pattern: String) =
+            value?.startsWith(pattern) == true
+    },
+    NOT_STARTS_WITH {
+        override fun test(value: String?, pattern: String) =
+            value?.startsWith(pattern) != true
+    },
+    ENDS_WITH {
+        override fun test(value: String?, pattern: String) =
+            value?.endsWith(pattern) == true
+    },
+    NOT_ENDS_WITH {
+        override fun test(value: String?, pattern: String) =
+            value?.endsWith(pattern) != true
+    },
+    CONTAINING {
+        override fun test(value: String?, pattern: String) =
+            value?.contains(pattern) == true
+    },
+    NOT_CONTAINING {
+        override fun test(value: String?, pattern: String) =
+            value?.contains(pattern) != true
+    },
+    REGEXP {
+        override fun test(value: String?, pattern: String) =
+            value != null && Regex(pattern).containsMatchIn(value)
+    };
+}
+----
+
+=== 3. `StringP` Wrapper
+
+[source,kotlin]
+----
+class StringP(
+    private val biPredicate: StringBiPredicate,
+    val pattern: String
+) : P<String>() {
+    override fun test(value: String?): Boolean = biPredicate.test(value, pattern)
+    override fun negate(): P<String> = StringP(biPredicate.negate(), pattern)
+    override fun toString(): String = "${biPredicate.name.lowercase()}($pattern)"
+}
+----
+
+=== 4. Integration with `HasStep` and `TinkerCatStepStrategy`
+
+The new predicates are handled by the existing `HasStep` predicate evaluation path.
+No changes are required to `HasStep` itself — it calls `predicate.test(value)`.
+
+`TinkerCatStepStrategy` (Task 7.5.1) currently maps only numeric predicates to
+`RangeCriterion`. String predicates fall back to in-memory filtering, which is correct
+for `startingWith`, `endingWith`, and `containing`.
+
+`regexp` is always in-memory because a regex-indexed structure would require a full
+text-search engine, which is out of scope.
+
+=== 5. GraphSON Serialisation of String Predicates
+
+GraphSON v3 encodes string predicates as:
+
+[source,json]
+----
+{
+  "@type": "g:P",
+  "@value": {
+    "predicate": "startingWith",
+    "value": "Al"
+  }
+}
+----
+
+Extend `GraphSONWriter.writeValue()` and `GraphSONReader.parseTypedValue()`:
+
+[source,kotlin]
+----
+// Writer
+is StringP -> buildJsonObject {
+    put("@type", "g:P")
+    putJsonObject("@value") {
+        put("predicate", predicate.biPredicate.name.lowercase())
+        put("value", predicate.pattern)
+    }
+}
+
+// Reader
+"startingWith"    -> P.startingWith(value.jsonPrimitive.content)
+"notStartingWith" -> P.notStartingWith(value.jsonPrimitive.content)
+"endingWith"      -> P.endingWith(value.jsonPrimitive.content)
+"notEndingWith"   -> P.notEndingWith(value.jsonPrimitive.content)
+"containing"      -> P.containing(value.jsonPrimitive.content)
+"notContaining"   -> P.notContaining(value.jsonPrimitive.content)
+"regexp"          -> P.regexp(value.jsonPrimitive.content)
+----
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+
+// Vertices whose name starts with "Al"
+val als = g.V().has("name", P.startingWith("Al")).toList()
+
+// Vertices whose email ends with "@example.com"
+val exampleEmails = g.V().has("email", P.endingWith("@example.com")).toList()
+
+// Vertices whose bio contains the word "engineer"
+val engineers = g.V().has("bio", P.containing("engineer")).toList()
+
+// Vertices whose postal code matches a UK format
+val ukPostcodes = g.V().has("postcode", P.regexp("[A-Z]{1,2}[0-9R][0-9A-Z]? [0-9][ABD-HJLNP-UW-Z]{2}")).toList()
+
+// Combine with existing predicates using and()/or()
+val filtered = g.V().has("name", P.startingWith("A").and(P.endingWith("e"))).toList()
+----
+
+== Test Plan
+
+* `StringPredicateTest` in `commonTest`:
+  - `startingWith`: matches prefix, rejects non-prefix, null-safe (returns false for null)
+  - `notStartingWith`: inverse of above
+  - `endingWith` / `notEndingWith`: suffix matching
+  - `containing` / `notContaining`: substring matching
+  - `regexp`: valid pattern matches, non-match returns false, invalid regex raises `IllegalArgumentException`
+  - `has("key", P.startingWith(...))` within a full traversal pipeline
+  - GraphSON round-trip for each predicate type
+  - `negate()` returns the logical inverse predicate
+  - `and()` / `or()` composition with string predicates
+
+== Acceptance Criteria
+
+- [x] All seven predicates implemented in `commonMain`
+- [x] Null-safe: all predicates return `false` for `null` property values
+- [x] GraphSON serialisation / deserialisation for all seven predicates
+- [x] `has()` traversal step correctly applies string predicates via `HasStep`
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#a-note-on-predicates[TinkerPop 3.8.1: P Predicates]
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#startingWith[TinkerPop 3.8.1: startingWith/endingWith/containing]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.4.2-string-steps.adoc[Task 7.4.2: String Manipulation Steps]
+* xref:task-7.5.1-step-strategy.adoc[Task 7.5.1: TinkerCatStepStrategy]

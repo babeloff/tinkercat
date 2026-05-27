@@ -1,0 +1,201 @@
+= Task 7.4.3: Date/Time Traversal Steps
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 1–2 weeks +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine], xref:task-7.3.1-temporal-properties.adoc[Task 7.3.1: Temporal Property Value Support] +
+*Upstream Reference*: TinkerPop 3.8.x date/time traversal steps
+
+TinkerPop 3.8.x added three dedicated traversal steps for date/time manipulation:
+`asDate()`, `dateAdd()`, and `dateDiff()`.
+These complement the temporal property types added in Task 7.3.1 and allow date
+arithmetic to be expressed directly in a traversal pipeline.
+
+== Steps to Implement
+
+[cols="2,4,2", options="header"]
+|===
+|Step |Behaviour |Kotlin equivalent
+
+|`asDate()`
+|Coerce the current traversal value to a `TinkerInstant`.
+Accepts a `Long` (epoch millis), ISO-8601 `String`, `java.util.Date` (JVM),
+or any temporal type that can be unambiguously converted.
+|`TinkerInstant.fromEpochMilliseconds(value)` etc.
+
+|`dateAdd(chronoUnit, amount)`
+|Add `amount` units (`DayOfWeek`, `ChronoUnit`, or `TemporalUnit`) to the
+current `TinkerInstant` / temporal value; returns the shifted temporal value.
+|`instant.plus(amount, unit)`
+
+|`dateDiff(chronoUnit, other)`
+|Compute the signed difference between the current temporal value and `other`
+in the given `chronoUnit`; returns a `Long`.
+|`ChronoUnit.between(a, b)`
+|===
+
+== Implementation Plan
+
+=== 1. `asDate()` Step
+
+[source,kotlin]
+----
+class AsDateStep : MapStep<Any?, TinkerInstant>() {
+    override fun map(traverser: Traverser<Any?>): TinkerInstant =
+        when (val v = traverser.get()) {
+            is TinkerInstant      -> v
+            is Long               -> TinkerInstant.fromEpochMilliseconds(v)
+            is String             -> TinkerInstant.parse(v)
+            is java.util.Date     -> TinkerInstant.fromEpochMilliseconds(v.time)   // JVM only
+            else -> throw IllegalArgumentException(
+                "Cannot convert ${v?.let { it::class.simpleName } ?: "null"} to TinkerInstant"
+            )
+        }
+}
+----
+
+Platform notes:
+
+* JVM: `java.util.Date` coercion is compiled into `jvmMain` via `expect/actual`.
+* JS/Native: only `Long` (epoch ms) and `String` (ISO-8601) coercions apply.
+
+=== 2. `dateAdd()` Step
+
+[source,kotlin]
+----
+// commonMain
+enum class DurationUnit { MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS }
+
+class DateAddStep(
+    private val unit: DurationUnit,
+    private val amount: Long
+) : MapStep<TinkerInstant, TinkerInstant>() {
+    override fun map(traverser: Traverser<TinkerInstant>): TinkerInstant =
+        traverser.get().plus(amount, unit)
+}
+----
+
+`TinkerInstant.plus(amount, unit)` is an `expect` extension function:
+
+[source,kotlin]
+----
+// commonMain
+expect fun TinkerInstant.plus(amount: Long, unit: DurationUnit): TinkerInstant
+
+// jvmMain
+actual fun TinkerInstant.plus(amount: Long, unit: DurationUnit): TinkerInstant =
+    this.plus(amount, unit.toChronoUnit())
+
+// jsMain / nativeMain  (kotlinx-datetime)
+actual fun TinkerInstant.plus(amount: Long, unit: DurationUnit): TinkerInstant =
+    this.plus(amount.toDuration(unit.toDateTimeUnit()))
+----
+
+=== 3. `dateDiff()` Step
+
+[source,kotlin]
+----
+class DateDiffStep(
+    private val unit: DurationUnit,
+    private val other: TinkerInstant
+) : MapStep<TinkerInstant, Long>() {
+    override fun map(traverser: Traverser<TinkerInstant>): Long =
+        traverser.get().until(other, unit)
+}
+----
+
+`TinkerInstant.until(other, unit)` follows the same `expect/actual` pattern as `plus()`.
+
+=== 4. `GraphTraversal` DSL Methods
+
+[source,kotlin]
+----
+// on GraphTraversal<S, Any?> or GraphTraversal<S, E>
+fun GraphTraversal<*, Any?>.asDate(): GraphTraversal<*, TinkerInstant>
+
+// on GraphTraversal<S, TinkerInstant>
+fun GraphTraversal<*, TinkerInstant>.dateAdd(
+    unit: DurationUnit, amount: Long
+): GraphTraversal<*, TinkerInstant>
+
+fun GraphTraversal<*, TinkerInstant>.dateDiff(
+    unit: DurationUnit, other: TinkerInstant
+): GraphTraversal<*, Long>
+----
+
+=== 5. Sub-traversal Form of `dateDiff()`
+
+TinkerPop 3.8.x also allows a sub-traversal to supply the reference date:
+
+[source,kotlin]
+----
+fun GraphTraversal<*, TinkerInstant>.dateDiff(
+    unit: DurationUnit,
+    otherTraversal: GraphTraversal<*, TinkerInstant>
+): GraphTraversal<*, Long>
+----
+
+Implementation resolves `otherTraversal` to a single value at execution time.
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+val now = TinkerInstant.now()
+
+// Normalise a stored epoch-millis property to an Instant
+val instants = g.V().hasLabel("event")
+    .values<Long>("epochMs")
+    .asDate()
+    .toList()
+
+// Shift all event timestamps by 7 days
+val shifted = g.V().hasLabel("event")
+    .values<TinkerInstant>("scheduledAt")
+    .dateAdd(DurationUnit.DAYS, 7)
+    .toList()
+
+// How many days since each person was created?
+val ages = g.V().hasLabel("person")
+    .values<TinkerInstant>("createdAt")
+    .dateDiff(DurationUnit.DAYS, now)
+    .toList()
+----
+
+== Test Plan
+
+* `DateTimeStepTest` in `commonTest`:
+  - `asDate()` from `Long` returns correct `TinkerInstant`
+  - `asDate()` from ISO-8601 `String` round-trips losslessly
+  - `asDate()` from unsupported type throws `IllegalArgumentException`
+  - `dateAdd(DAYS, 1)` adds exactly 86 400 000 ms
+  - `dateAdd(HOURS, -1)` subtracts one hour
+  - `dateDiff(DAYS, ...)` returns correct signed integer
+  - `dateDiff` with sub-traversal resolves reference date correctly
+  - Pipeline composition: `asDate().dateAdd().dateDiff()` produces expected result
+
+* Platform-specific:
+  - JVM: `asDate()` from `java.util.Date`
+
+== Acceptance Criteria
+
+- [x] `asDate()`, `dateAdd()`, and `dateDiff()` implemented and available in `GraphTraversal`
+- [x] All three steps compose correctly in a pipeline
+- [x] `expect/actual` pattern used for platform-specific temporal arithmetic
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#asdate-step[TinkerPop 3.8.1: asDate() step]
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#dateadd-step[TinkerPop 3.8.1: dateAdd() step]
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#datediff-step[TinkerPop 3.8.1: dateDiff() step]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.3.1-temporal-properties.adoc[Task 7.3.1: Temporal Property Value Support]

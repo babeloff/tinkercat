@@ -1,0 +1,345 @@
+= Getting Started on Native
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Introduction
+
+This tutorial covers using TinkerCat compiled to a native binary — no JVM, no Node.js runtime.
+The native target produces standalone executables and shared libraries for Linux x64, macOS ARM64,
+and Windows MinGW x64 from the same shared Kotlin source used by the JVM and JavaScript targets.
+
+Native is the right choice when:
+
+* You want zero startup latency.
+* You are distributing a self-contained binary without a runtime dependency.
+* You are embedding TinkerCat into a C, C++, Rust, or Python application via a shared library.
+* You are running on embedded or edge hardware without a JVM.
+
+== Prerequisites
+
+[cols="1,2", options="header"]
+|===
+|Requirement |Version
+
+|Kotlin
+|2.3.x (Kotlin/Native toolchain, managed by pixi)
+
+|Gradle
+|9.x (managed by pixi)
+
+|C compiler (for shared library use)
+|Any system C compiler (`gcc`, `clang`, MSVC)
+
+|pixi
+|Current version
+|===
+
+[source,bash]
+----
+pixi install    # install the Kotlin/Native toolchain and Gradle wrapper
+----
+
+== Building
+
+=== Compile the Native Target
+
+[source,bash]
+----
+pixi run gradle compileKotlinNative
+----
+
+=== Build a Runnable Executable
+
+[source,bash]
+----
+pixi run gradle linkDebugExecutableNative    # debug binary (faster build)
+pixi run gradle linkReleaseExecutableNative  # optimised release binary
+----
+
+The output lands in:
+
+----
+build/bin/native/debugExecutable/tinkercat.kexe
+build/bin/native/releaseExecutable/tinkercat.kexe
+----
+
+=== Build a Shared Library (for FFI / Python bindings)
+
+[source,bash]
+----
+pixi run gradle linkDebugSharedNative    # debug .so / .dylib / .dll
+pixi run gradle linkReleaseSharedNative  # release shared library
+----
+
+Output:
+
+----
+build/bin/native/debugShared/libtinkercat.so      (Linux)
+build/bin/native/debugShared/libtinkercat.dylib   (macOS)
+build/bin/native/debugShared/libtinkercat.dll     (Windows)
+----
+
+=== Run the Native Demo
+
+[source,bash]
+----
+pixi run gradle runNativeDemo
+----
+
+== Writing a Native Kotlin Application
+
+The graph API is identical to the shared common module.
+Import only from `org.apache.tinkerpop.gremlin.*` — no platform-specific imports are needed for basic use.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
+import org.apache.tinkerpop.gremlin.structure.Direction
+
+fun main() {
+    println("TinkerCat Native Demo")
+
+    val graph = TinkerCat.open()
+
+    // Build the Modern toy graph
+    val marko  = graph.addVertex("label", "person",   "name", "marko",  "age", 29)
+    val vadas  = graph.addVertex("label", "person",   "name", "vadas",  "age", 27)
+    val josh   = graph.addVertex("label", "person",   "name", "josh",   "age", 32)
+    val lop    = graph.addVertex("label", "software", "name", "lop",    "lang", "java")
+    val ripple = graph.addVertex("label", "software", "name", "ripple", "lang", "java")
+    val peter  = graph.addVertex("label", "person",   "name", "peter",  "age", 35)
+
+    marko.addEdge("knows",   vadas,  "weight", 0.5)
+    marko.addEdge("knows",   josh,   "weight", 1.0)
+    marko.addEdge("created", lop,    "weight", 0.4)
+    josh.addEdge( "created", ripple, "weight", 1.0)
+    josh.addEdge( "created", lop,    "weight", 0.4)
+    peter.addEdge("created", lop,    "weight", 0.2)
+
+    println("Vertices: ${graph.vertices().asSequence().count()}")  // → 6
+    println("Edges:    ${graph.edges().asSequence().count()}")     // → 6
+
+    val friends = marko.vertices(Direction.OUT, "knows")
+        .asSequence()
+        .map { it.value<String>("name") }
+        .toList()
+
+    println("marko knows: $friends")   // → [vadas, josh]
+
+    graph.close()
+}
+----
+
+== Platform Features
+
+=== Performance Statistics
+
+`Platform.getNativePerformanceStatistics()` returns OS and CPU details at runtime:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.platform.Platform
+
+val stats = Platform.getNativePerformanceStatistics()
+val info  = stats.platformInfo
+println("OS:    ${info.osFamily}")
+println("CPU:   ${info.cpuArchitecture}")
+println("Cores: ${info.availableCores}")
+println("RAM:   ${info.availableMemory / 1_000_000}MB")
+----
+
+=== High-Resolution Timing
+
+[source,kotlin]
+----
+val t0 = Platform.currentTimeMillis()
+// ... graph operations ...
+val elapsed = Platform.timeDifference(t0, Platform.currentTimeMillis())
+println("Elapsed: ${elapsed}ms")
+----
+
+=== Memory Pools
+
+Pre-allocate vertex and edge object pools to eliminate allocation jitter during heavy workloads:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.optimization.MemoryPool
+
+MemoryPool.warmupPools(vertexCount = 100_000, edgeCount = 500_000)
+
+val graph = TinkerCat.open()
+// ... batch loading ...
+----
+
+=== Native Threading
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.optimization.NativeThreading
+
+// Initialise a thread pool for parallel graph algorithms
+NativeThreading.initialize(threadCount = 8)
+----
+
+=== Memory-Mapped Files
+
+For graphs too large to keep fully in RAM, use a memory-mapped backing file:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.optimization.NativeMemoryMapping
+
+NativeMemoryMapping.createMappedFile("graph-data.bin", size = 4_000_000_000L)
+----
+
+=== Profile-Guided Optimization
+
+Instrument hot code paths to collect runtime statistics:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.optimization.ProfileGuidedOptimization
+
+val result = ProfileGuidedOptimization.profileOperation("graph_query") {
+    graph.vertices().asSequence()
+        .filter { (it.value<Int>("age") ?: 0) > 28 }
+        .map { it.value<String>("name") }
+        .toList()
+}
+
+val opt = ProfileGuidedOptimization.getOptimizationStatistics()
+println("Optimisations applied: ${opt.totalOptimizationsApplied}")
+println("Average query time:    ${opt.averageQueryTime}ms")
+----
+
+=== Native Collections
+
+Platform-native collection types can reduce garbage pressure in tight loops:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.collections.NativeCollections
+
+val vertexList = NativeCollections.createVertexList()
+graph.vertices().forEach { v -> vertexList.add(v) }
+println("Collected ${vertexList.size} vertices using native memory")
+----
+
+== Using the Shared Library from C
+
+The release shared library exposes a C ABI suitable for FFI consumers.
+
+=== C Header (generated)
+
+[source,c]
+----
+#include "libtinkercat_api.h"
+
+// Create a graph
+void* graph = tinkercat_create();
+
+// Add a vertex
+void* vertex = tinkercat_add_vertex(graph, "v1");
+
+// Add a vertex with properties
+const char* keys[]   = {"name", "age"};
+const char* values[] = {"Alice", "30"};
+void* vertex2 = tinkercat_add_vertex_with_properties(graph, "v2", keys, values, 2);
+
+// Add an edge
+void* edge = tinkercat_add_edge(graph, "knows", vertex, vertex2);
+
+// Query counts
+long vcount = tinkercat_vertex_count(graph);
+long ecount = tinkercat_edge_count(graph);
+printf("Vertices: %ld, Edges: %ld\n", vcount, ecount);
+
+// Cleanup
+tinkercat_destroy(graph);
+----
+
+=== Compile and Link
+
+[source,bash]
+----
+# Linux / macOS
+gcc myapp.c \
+    -I build/bin/native/releaseShared \
+    -L build/bin/native/releaseShared \
+    -ltinkercat \
+    -Wl,-rpath,'$ORIGIN' \
+    -o myapp
+
+./myapp
+----
+
+== GraphSON Serialization on Native
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONWriter
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONReader
+
+// Serialize
+val json = GraphSONWriter().writeGraph(graph)
+// Write to file using Kotlin/Native file I/O
+java.io.File("graph.graphson").writeText(json)   // kotlinx.io on Native
+
+// Restore
+val restoredJson = java.io.File("graph.graphson").readText()
+val restoredGraph = GraphSONReader().readGraph(restoredJson)
+----
+
+== Indexing on Native
+
+Indexing behaviour is identical to the other platforms.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.structure.Vertex
+
+// Single-property equality index
+graph.createIndex("name", Vertex::class)
+
+// Range index for numeric queries
+graph.createRangeIndex("age", Vertex::class)
+
+// Composite index for multi-property queries
+graph.createCompositeIndex(Vertex::class, "department", "role")
+----
+
+== Running Tests
+
+[source,bash]
+----
+pixi run test-native                     # run native test suite
+pixi run gradle linkReleaseSharedNative  # build release shared library
+----
+
+== Deployment
+
+=== Linux x64
+
+Distribute `libtinkercat.so` alongside your application.
+Set `LD_LIBRARY_PATH` or install the library into `/usr/local/lib`.
+
+=== macOS ARM64
+
+Distribute `libtinkercat.dylib`.
+Use `install_name_tool` to embed the correct rpath, or distribute with `@rpath` linkage.
+
+=== Windows MinGW x64
+
+Distribute `libtinkercat.dll` in the same directory as the executable,
+or add it to the system `PATH`.
+
+== Next Steps
+
+* xref:../reference/tinkercat-gremlin.adoc[TinkerCat-Gremlin Reference] — full API reference
+* xref:../tutorials/python.adoc[Python Tutorial] — using TinkerCat from Python via the native shared library
+* xref:../reference/algorithms.adoc[Graph Algorithms]
+* xref:../reference/indexing.adoc[Advanced Indexing]

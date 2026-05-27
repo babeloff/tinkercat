@@ -1404,6 +1404,426 @@ Package all products as conda-forge packages:
 - Version management and dependency specification
 - Place the implementation summary in ./docs/changelog/ as phase6.2.3-conda-packaging.adoc
 
+== Phase 7: TinkerGraph 3.8.x Parity
+
+=== Background
+
+TinkerCat was initially implemented against the Apache TinkerPop **3.7.x** branch
+(see xref:../explanation/provenance.adoc[Provenance]).
+The upstream project has since released **3.8.x**, introducing new graph features,
+traversal steps, and structural improvements.
+This phase tracks the delta work needed to reach parity with the current upstream release.
+
+[NOTE]
+====
+TinkerCat does not yet bundle a Gremlin traversal engine, so items marked
+_Traversal engine required_ depend on a future traversal layer being added (see task 7.1.1).
+Items marked _Structure API_ are achievable with the current direct-manipulation architecture.
+====
+
+=== 7.1 Traversal Engine Foundation
+
+**Task 7.1.1: Gremlin traversal engine integration** [⏸️ TODO]
+
+TinkerGraph 3.8.x ships a `GraphTraversalSource` obtained via `graph.traversal()`.
+TinkerCat currently has no equivalent; all querying is done through direct
+`Iterator`/`Sequence` APIs and `PropertyQueryEngine`.
+This task is a prerequisite for all step-level parity work below.
+
+- Implement `GraphTraversalSource` and `GraphTraversal` Kotlin interfaces in `commonMain`
+- Wire `TinkerCat.traversal()` to return a source backed by the existing iterator layer
+- Implement terminal steps: `toList()`, `toSet()`, `next()`, `hasNext()`, `iterate()`, `count()`, `tryNext()`
+- Implement the core filtering steps: `V()`, `E()`, `hasLabel()`, `has()`, `hasId()`, `hasNot()`, `not()`
+- Implement traversal steps: `out()`, `in()`, `both()`, `outE()`, `inE()`, `bothE()`, `outV()`, `inV()`, `otherV()`
+- Implement projection steps: `values()`, `valueMap()`, `properties()`, `id()`, `label()`, `elementMap()`
+- Implement `select()`, `as()`, `dedup()`, `limit()`, `range()`, `tail()`, `skip()`
+- Implement `order()` with `by()` modulator (ascending, descending, shuffle)
+- Document the traversal API for each platform
+
+**Effort estimate**: 8-12 weeks
+**Priority**: HIGH — unlocks all step-level parity tasks
+
+=== 7.2 Transaction Support
+
+**Task 7.2.1: `TinkerTransactionGraph` implementation** [⏸️ TODO]
+
+TinkerPop 3.8.x formalised `TinkerTransactionGraph`, a variant of TinkerGraph that provides
+ACID-compliant, thread-local transactions with explicit `commit()` and `rollback()`.
+This is separate from the non-transactional `TinkerGraph`.
+
+_Structure API — does not require the traversal engine._
+
+- Add `TinkerTransactionGraph` class in `jvmMain` as the transactional variant
+- Implement thread-local transaction state with read-your-writes isolation
+- Implement `tx().open()`, `tx().commit()`, `tx().rollback()`, `tx().close()`
+- Implement multi-vertex locking strategy for concurrent write transactions
+- Implement transaction log for crash recovery (build on `JvmPersistenceLayer` foundation)
+- Update `TinkerCatGraphFeatures.supportsTransactions()` to return `true` for this variant
+- Add `TinkerTransactionGraph` demo to `JvmPlatformDemo`
+- Test suite: ACID properties, concurrent commit conflicts, rollback correctness
+
+NOTE: Transactions are intentionally JVM-only in this phase.
+The Native and JS targets will surface a `supportsTransactions() = false` feature flag.
+
+**Effort estimate**: 3-4 weeks
+**Priority**: HIGH — frequently requested for production use
+
+=== 7.3 Date and Time Property Types
+
+**Task 7.3.1: Temporal property value support** [⏸️ TODO]
+
+TinkerGraph 3.8.x added native support for temporal types as property values,
+with corresponding GraphSON v3 serialization tokens.
+
+_Structure API — does not require the traversal engine._
+
+[cols="1,1,2", options="header"]
+|===
+|TinkerPop type |GraphSON token |Notes
+
+|`java.util.Date`
+|`g:Date`
+|Milliseconds since epoch
+
+|`java.time.Instant`
+|`g:Instant`
+|ISO-8601 timestamp
+
+|`java.time.LocalDate`
+|`g:LocalDate`
+|Date without time-zone
+
+|`java.time.LocalDateTime`
+|`g:LocalDateTime`
+|Date-time without time-zone
+
+|`java.time.OffsetDateTime`
+|`g:OffsetDateTime`
+|Date-time with offset
+
+|`java.time.Duration`
+|`g:Duration`
+|ISO-8601 duration string
+|===
+
+Implementation tasks:
+
+- Extend `GraphSONWriter.writeTypedValue()` with serialisers for all six types
+- Extend `GraphSONReader` with deserialisers for all six GraphSON tokens
+- Add range-index support for `Comparable` date/time types (already generic — verify coverage)
+- JVM: use `java.time.*` directly; share via `expect/actual` for JS and Native
+- JS: map to `Date` (milliseconds) for `g:Date`/`g:Instant`; ISO strings for the rest
+- Native: use `kotlinx-datetime` library for platform-agnostic temporal types
+- Update `PropertyQueryEngine.RangeCriterion` to handle temporal comparisons
+- Add compliance tests for temporal property round-trips
+
+**Effort estimate**: 2-3 weeks
+**Priority**: MEDIUM
+
+=== 7.4 New Gremlin Steps (Traversal Engine Required)
+
+All tasks in this section depend on **Task 7.1.1** being completed first.
+
+==== 7.4.1 Merge Steps
+
+**Task 7.4.1: `mergeV()` and `mergeE()` upsert steps** [⏸️ TODO]
+
+`mergeV()` and `mergeE()` were introduced in 3.6 and significantly stabilised in 3.8.x.
+They provide upsert semantics: create a vertex or edge if it does not exist, or match an
+existing one using a search predicate.
+
+[source,kotlin]
+----
+// TinkerPop 3.8 reference behaviour
+g.mergeV(mapOf(T.label, "person", "name", "Alice"))
+    .option(Merge.onCreate, mapOf("age", 30))
+    .option(Merge.onMatch, mapOf("lastSeen", now))
+----
+
+- Implement `mergeV(searchCriteria)` traversal step
+- Implement `mergeE(searchCriteria)` traversal step
+- Implement the `Merge.onCreate` and `Merge.onMatch` option modulator semantics
+- Add a `TinkerCatMergeStrategy` traversal strategy to push down merge predicates into the index layer
+- Compliance tests matching upstream TinkerPop merge semantics
+
+**Effort estimate**: 2-3 weeks
+**Priority**: HIGH — common production pattern
+
+==== 7.4.2 String Manipulation Steps
+
+**Task 7.4.2: String step implementations** [⏸️ TODO]
+
+TinkerPop 3.8.x added a suite of string-manipulation traversal steps.
+
+[cols="1,2", options="header"]
+|===
+|Step |Description
+
+|`concat(string, …)`
+|Concatenate the current value with one or more strings or traversal results
+
+|`format(template)`
+|String interpolation using `%s` / named token placeholders
+
+|`toLower()`
+|Convert string property to lower case
+
+|`toUpper()`
+|Convert string property to upper case
+
+|`trim()` / `ltrim()` / `rtrim()`
+|Strip leading/trailing whitespace
+
+|`replace(pattern, replacement)`
+|Replace occurrences of a substring or regex pattern
+
+|`split(delimiter)`
+|Split a string into a list
+
+|`length()` / `substring(start, end)`
+|String length and sub-string extraction
+|===
+
+**Effort estimate**: 1-2 weeks
+
+==== 7.4.3 Date/Time Steps
+
+**Task 7.4.3: Temporal traversal steps** [⏸️ TODO]
+
+[cols="1,2", options="header"]
+|===
+|Step |Description
+
+|`asDate()`
+|Parse a string or numeric property value into a `g:Date` typed value
+
+|`dateAdd(chronoUnit, amount)`
+|Add a duration to a date property value (result is a new typed date)
+
+|`dateDiff(date)`
+|Compute the difference between two date property values
+|===
+
+Depends on **Task 7.3.1** (temporal property type support).
+
+**Effort estimate**: 1 week
+
+==== 7.4.4 `element()` Step
+
+**Task 7.4.4: `element()` step** [⏸️ TODO]
+
+`element()` converts a `VertexProperty` or `Property` traversal result back to the owning
+`Vertex` or `Edge`.
+This step is needed to navigate from a property result to its containing element.
+
+[source]
+----
+// TinkerPop reference
+g.V().properties("age").element()  // → vertices that had an "age" property
+----
+
+**Effort estimate**: < 1 week
+
+==== 7.4.5 `call()` Step
+
+**Task 7.4.5: `call()` service step** [⏸️ TODO]
+
+`call()` invokes a registered service (analogous to a stored procedure or micro-query).
+TinkerGraph 3.8.x ships a `GremlinService` SPI that TinkerGraph can use to expose
+services such as sampling and generation.
+
+- Define `GremlinService` interface in `commonMain`
+- Implement `call(serviceName)` and `call(serviceName, serviceParams)` traversal steps
+- Register a `TinkerGraphRandomWalkService` as a built-in example service
+- Document the service SPI for user extension
+
+**Effort estimate**: 2 weeks
+**Priority**: LOW
+
+==== 7.4.6 `discard()` Step
+
+**Task 7.4.6: `discard()` step** [⏸️ TODO]
+
+`discard()` acts like `drop()` on the traversal but retains the side-effect bag.
+It was added in 3.8.x to decouple data removal from traversal mutation.
+
+[source]
+----
+g.withSideEffect("x", []).V().store("x").discard()
+----
+
+**Effort estimate**: < 1 week
+
+=== 7.5 Traversal Strategy Improvements
+
+**Task 7.5.1: `TinkerCatStepStrategy` enhancements** [⏸️ TODO]
+
+The `TinkerCatStepStrategy` in TinkerGraph 3.8.x pushes `has()` predicates into the
+underlying index layer before traversal execution, reducing the number of vertices
+scanned.
+The 3.8.x version adds support for `mergeV()`/`mergeE()` predicate push-down
+and improved handling of `has(key, P.within(…))` multi-value predicates.
+
+Depends on **Task 7.1.1**.
+
+- Port `TinkerCatStepStrategy` into the Kotlin traversal engine
+- Add predicate push-down for `has()`, `hasLabel()`, `hasId()` against all three index types
+- Add push-down support for `mergeV()`/`mergeE()` search criteria
+- Benchmark: confirm strategy reduces vertex scans by >50% on indexed graphs
+
+**Effort estimate**: 2-3 weeks
+
+**Task 7.5.2: `TinkerCatCountStrategy`** [⏸️ TODO]
+
+`TinkerCatCountStrategy` short-circuits `count()` steps by reading cached element
+counts from the graph's internal maps rather than scanning all elements.
+
+- Implement `TinkerCatCountStrategy` in the Kotlin traversal layer
+- Wire to `TinkerCat.vertices.size` and `TinkerCat.edges.size` directly
+
+**Effort estimate**: < 1 week
+
+=== 7.6 Serialisation Improvements
+
+**Task 7.6.1: GraphBinary 4.0 support** [⏸️ TODO]
+
+TinkerPop 3.8.x ships an updated GraphBinary serialisation format (4.0) alongside GraphSON.
+GraphBinary is a compact binary format that is faster to parse and more compact than JSON.
+
+_Structure API — does not require the traversal engine._
+
+- Implement `GraphBinaryWriter` in `commonMain` covering core element types
+- Implement `GraphBinaryReader` in `commonMain`
+- Platform-specific I/O adapters: `OutputStream`/`InputStream` on JVM,
+  `Uint8Array` on JS, native byte arrays on Native
+- Add GraphBinary round-trip compliance tests
+
+**Effort estimate**: 3-4 weeks
+**Priority**: MEDIUM
+
+=== 7.7 Gremlin 4.0 Preparatory Changes
+
+TinkerPop 3.8.x began deprecating certain patterns in preparation for Gremlin 4.0.
+
+**Task 7.7.1: Lambda deprecation** [⏸️ TODO]
+
+Lambdas in Gremlin traversals (e.g., `filter{ it.get().value("age") > 30 }`) are
+deprecated in 3.8.x.
+The replacement is typed steps (`has("age", P.gte(30))`).
+
+- Audit any lambda-accepting methods in the TinkerCat traversal engine (once added)
+- Mark lambda-based overloads with `@Deprecated` and document migration paths
+- Ensure all core filter patterns have typed-step equivalents
+
+**Task 7.7.2: `P` predicate additions** [⏸️ TODO]
+
+3.8.x added `P.regexp()` and clarified `P.within()`/`P.without()` semantics for null values.
+
+[cols="1,2", options="header"]
+|===
+|Predicate |Description
+
+|`P.regexp(pattern)`
+|Match a string property against a regular expression
+
+|`P.startingWith(prefix)`
+|String prefix match (alias for a common `regexp` pattern)
+
+|`P.endingWith(suffix)`
+|String suffix match
+
+|`P.containing(substring)`
+|String contains match
+|===
+
+- Add these predicates to the `P` object in `commonMain`
+- Wire them into `PropertyQueryEngine.findVerticesWithPropertyPattern()`
+  for use without the traversal engine
+- Wire them into traversal-engine `has()` step predicate evaluation once 7.1.1 is complete
+
+**Effort estimate**: 1 week
+
+=== 7.8 Phase 7 Summary
+
+[cols="2,1,1,2", options="header"]
+|===
+|Task |Status |Effort |Dependency
+
+|7.1.1 Traversal engine
+|⏸️ TODO
+|8-12 weeks
+|None
+
+|7.2.1 TinkerTransactionGraph
+|⏸️ TODO
+|3-4 weeks
+|None (JVM only)
+
+|7.3.1 Temporal property types
+|⏸️ TODO
+|2-3 weeks
+|None
+
+|7.4.1 mergeV / mergeE steps
+|⏸️ TODO
+|2-3 weeks
+|7.1.1
+
+|7.4.2 String steps
+|⏸️ TODO
+|1-2 weeks
+|7.1.1
+
+|7.4.3 Date/time steps
+|⏸️ TODO
+|1 week
+|7.1.1, 7.3.1
+
+|7.4.4 element() step
+|⏸️ TODO
+|< 1 week
+|7.1.1
+
+|7.4.5 call() step
+|⏸️ TODO
+|2 weeks
+|7.1.1
+
+|7.4.6 discard() step
+|⏸️ TODO
+|< 1 week
+|7.1.1
+
+|7.5.1 TinkerCatStepStrategy
+|⏸️ TODO
+|2-3 weeks
+|7.1.1
+
+|7.5.2 TinkerCatCountStrategy
+|⏸️ TODO
+|< 1 week
+|7.1.1
+
+|7.6.1 GraphBinary 4.0
+|⏸️ TODO
+|3-4 weeks
+|None
+
+|7.7.1 Lambda deprecation
+|⏸️ TODO
+|1 week
+|7.1.1
+
+|7.7.2 P predicate additions
+|⏸️ TODO
+|1 week
+|None
+|===
+
+The critical-path item is **Task 7.1.1** (traversal engine).
+All traversal-step work is blocked on it.
+The three structure-API tasks (7.2.1, 7.3.1, 7.6.1) can proceed immediately in parallel.
+
 == Success Criteria
 
 === Functional Requirements

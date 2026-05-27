@@ -1,0 +1,357 @@
+= Getting Started on npm (JavaScript / TypeScript)
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Introduction
+
+This tutorial covers using TinkerCat in a JavaScript or TypeScript project — whether that is a Node.js
+backend, a browser-based application, or a bundled frontend.
+
+The `tinkercat` npm package is compiled from the same shared Kotlin source as the JVM and Native targets
+using Kotlin/JS IR output.
+It ships TypeScript definition files (`.d.ts`) generated automatically at build time, so IDE type-checking
+works out of the box.
+
+== Prerequisites
+
+[cols="1,2", options="header"]
+|===
+|Requirement |Version
+
+|Node.js
+|18 LTS or later
+
+|npm / yarn / pnpm
+|Any current version
+
+|TypeScript (optional)
+|5.x or later for `.d.ts` support
+|===
+
+== Installation
+
+[source,bash]
+----
+npm install tinkercat
+# or
+yarn add tinkercat
+# or
+pnpm add tinkercat
+----
+
+=== Building from Source
+
+If you are working inside this repository, compile the JS target first:
+
+[source,bash]
+----
+pixi run gradle compileKotlinJs    # compile
+pixi run test-js-node              # run Node.js tests
+----
+
+The compiled output lands in `build/js/packages/tinkercat/`.
+
+== Importing TinkerCat
+
+=== ES Modules (TypeScript / modern Node.js)
+
+[source,typescript]
+----
+import {
+    createTinkerCat,
+    addVertexWithLabel,
+    addEdge,
+    getAllVertices,
+    getConnectedVertices,
+    getPropertyValue,
+    setProperty,
+    createIndex,
+} from 'tinkercat';
+----
+
+=== CommonJS (older Node.js)
+
+[source,javascript]
+----
+const {
+    createTinkerCat,
+    addVertexWithLabel,
+    addEdge,
+    getAllVertices,
+} = require('tinkercat');
+----
+
+=== Browser (bundled via webpack / Vite)
+
+[source,html]
+----
+<script type="module">
+import { createTinkerCat, addVertexWithLabel } from '/node_modules/tinkercat/tinkercat.mjs';
+// ...
+</script>
+----
+
+== Creating Your First Graph
+
+[source,typescript]
+----
+import {
+    createTinkerCat,
+    addVertexWithLabel,
+    addEdge,
+    getAllVertices,
+    getConnectedVertices,
+    getPropertyValue,
+} from 'tinkercat';
+
+// Open an in-memory graph
+const graph = createTinkerCat();
+
+// Add vertices
+const marko = addVertexWithLabel(graph, "person", { name: "marko", age: 29 });
+const vadas = addVertexWithLabel(graph, "person", { name: "vadas", age: 27 });
+const lop   = addVertexWithLabel(graph, "software", { name: "lop", lang: "java" });
+
+// Add edges
+addEdge(marko, "knows",   vadas, { weight: 0.5 });
+addEdge(marko, "created", lop,   { weight: 0.4 });
+
+// Query
+const all = getAllVertices(graph);
+console.log(`vertices: ${all.length}`);  // → 3
+
+// Traverse
+const friends = getConnectedVertices(marko, "OUT", ["knows"]);
+friends.forEach(f => console.log(getPropertyValue(f, "name")));  // → marko
+----
+
+== The Facade API
+
+Because Kotlin/JS `@JsExport` does not support companion objects or extension functions directly,
+TinkerCat exposes a set of top-level façade functions instead of a class-method API.
+
+[cols="2,3", options="header"]
+|===
+|Function |Description
+
+|`createTinkerCat()`
+|Create a graph with default configuration.
+
+|`createTinkerCatWithSettings(allowNullProperties, defaultCardinality)`
+|Create a graph with inline settings.
+
+|`addVertex(graph, properties)`
+|Add a vertex from a plain object.
+
+|`addVertexWithLabel(graph, label, properties)`
+|Add a labelled vertex.
+
+|`addEdge(outVertex, label, inVertex, properties)`
+|Add a directed edge.
+
+|`getVertex(graph, id)`
+|Look up a vertex by ID (returns `null` if not found).
+
+|`getAllVertices(graph)`
+|Return all vertices as an array.
+
+|`getVerticesByIds(graph, ids)`
+|Return specific vertices by ID array.
+
+|`getAllEdges(graph)`
+|Return all edges as an array.
+
+|`getVertexEdges(vertex, direction, labels)`
+|Return edges from a vertex, filtered by direction and optional labels.
+
+|`getConnectedVertices(vertex, direction, labels)`
+|Return neighbouring vertices.
+
+|`setProperty(element, key, value)`
+|Set a property on a vertex or edge.
+
+|`getPropertyValue(element, key)`
+|Read a property value (returns `null` if absent).
+
+|`getPropertyKeys(element)`
+|Return all property keys as an array.
+
+|`hasProperty(element, key)`
+|Check whether a property exists.
+
+|`createIndex(graph, propertyKey, elementType)`
+|Create a single-property index (`"Vertex"` or `"Edge"`).
+|===
+
+== TypeScript Types
+
+The build generates TypeScript declarations alongside the JavaScript output.
+After installing the package, your IDE will infer types automatically.
+
+[source,typescript]
+----
+import type { TinkerCat, Vertex, Edge } from 'tinkercat';
+
+function buildGraph(): TinkerCat {
+    const graph = createTinkerCat();
+    const alice: Vertex = addVertexWithLabel(graph, "person", { name: "Alice" });
+    const bob:   Vertex = addVertexWithLabel(graph, "person", { name: "Bob"   });
+    addEdge(alice, "knows", bob, { since: 2020 });
+    return graph;
+}
+----
+
+== Working with Properties
+
+[source,typescript]
+----
+import { createTinkerCat, addVertexWithLabel, setProperty, getPropertyValue, hasProperty } from 'tinkercat';
+
+const graph = createTinkerCat();
+const v = addVertexWithLabel(graph, "person", { name: "Alice", age: 30 });
+
+// Read
+const name = getPropertyValue(v, "name");  // → "Alice"
+const age  = getPropertyValue(v, "age");   // → 30
+
+// Write
+setProperty(v, "city", "Nashville");
+console.log(getPropertyValue(v, "city"));  // → "Nashville"
+
+// Check
+console.log(hasProperty(v, "city"));  // → true
+console.log(hasProperty(v, "score")); // → false
+----
+
+== Graph Traversal
+
+[source,typescript]
+----
+import {
+    createTinkerCat,
+    addVertexWithLabel,
+    addEdge,
+    getAllVertices,
+    getConnectedVertices,
+    getVertexEdges,
+    getPropertyValue,
+} from 'tinkercat';
+
+const graph = createTinkerCat();
+
+const marko = addVertexWithLabel(graph, "person",   { name: "marko",  age: 29 });
+const vadas = addVertexWithLabel(graph, "person",   { name: "vadas",  age: 27 });
+const josh  = addVertexWithLabel(graph, "person",   { name: "josh",   age: 32 });
+const lop   = addVertexWithLabel(graph, "software", { name: "lop",    lang: "java" });
+
+addEdge(marko, "knows",   vadas, { weight: 0.5 });
+addEdge(marko, "knows",   josh,  { weight: 1.0 });
+addEdge(marko, "created", lop,   { weight: 0.4 });
+
+// People marko knows
+const friends = getConnectedVertices(marko, "OUT", ["knows"]);
+console.log(friends.map(f => getPropertyValue(f, "name")));
+// → ["vadas", "josh"]
+
+// All of marko's outgoing edges
+const outEdges = getVertexEdges(marko, "OUT");
+console.log(outEdges.length);  // → 3
+
+// Filter vertices client-side
+const people = getAllVertices(graph)
+    .filter(v => v.label() === "person");
+
+const seniors = people
+    .filter(v => (getPropertyValue(v, "age") as number ?? 0) >= 30);
+
+console.log(seniors.map(v => getPropertyValue(v, "name")));
+// → ["josh"]
+----
+
+== Indexing
+
+[source,typescript]
+----
+import { createTinkerCat, addVertexWithLabel, createIndex } from 'tinkercat';
+
+const graph = createTinkerCat();
+
+// Create index before or after loading data
+createIndex(graph, "name", "Vertex");
+createIndex(graph, "age",  "Vertex");
+
+addVertexWithLabel(graph, "person", { name: "Alice", age: 30 });
+addVertexWithLabel(graph, "person", { name: "Bob",   age: 25 });
+----
+
+== GraphSON Serialization
+
+[source,typescript]
+----
+import { createTinkerCat, addVertexWithLabel, writeGraph, readGraph } from 'tinkercat';
+
+const graph = createTinkerCat();
+addVertexWithLabel(graph, "person", { name: "Alice" });
+
+// Serialize to a JSON string
+const json: string = writeGraph(graph);
+
+// Persist (Node.js)
+import { writeFileSync, readFileSync } from 'fs';
+writeFileSync('graph.graphson', json, 'utf8');
+
+// Restore
+const restored = readGraph(readFileSync('graph.graphson', 'utf8'));
+console.log(getAllVertices(restored).length);  // → 1
+----
+
+== Browser Storage
+
+The JS platform provides browser-native persistence backends.
+
+=== localStorage
+
+[source,typescript]
+----
+import { BrowserStorage } from 'tinkercat/platform';
+
+const storage = new BrowserStorage('tinkercat-graph');
+storage.save(json);
+const saved = storage.load();
+----
+
+=== IndexedDB (large graphs)
+
+[source,typescript]
+----
+import { IndexedDBStorage } from 'tinkercat/platform';
+
+const db = new IndexedDBStorage('tinkercat-db', 'graphs');
+await db.open();
+await db.save('main', json);
+const retrieved = await db.load('main');
+await db.close();
+----
+
+== Running Tests
+
+[source,bash]
+----
+# Node.js tests
+pixi run test-js-node
+
+# Browser tests (requires a browser)
+pixi run test-js-browser
+
+# Both
+pixi run test-js
+----
+
+== Next Steps
+
+* xref:../reference/tinkercat-gremlin.adoc[TinkerCat-Gremlin Reference] — traversal patterns and API overview
+* xref:../reference/api.adoc[API Reference] — complete method listing
+* xref:../reference/indexing.adoc[Advanced Indexing]

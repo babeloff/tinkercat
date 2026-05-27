@@ -1,0 +1,257 @@
+= Task 7.6.1: GraphBinary 4.0 Serialisation
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 3–4 weeks +
+*Dependencies*: xref:task-7.3.1-temporal-properties.adoc[Task 7.3.1: Temporal Property Value Support] +
+*Upstream Reference*: TinkerPop 3.8.x GraphBinary 4.0
+
+TinkerPop 3.8.x ships GraphBinary 4.0, a compact binary serialisation format that
+replaces the verbose JSON-based GraphSON format for high-throughput scenarios.
+GraphBinary encodes types with a single-byte type code prefix, achieving roughly 40%
+smaller payloads than GraphSON v3 for typical graph data.
+
+TinkerCat currently provides only GraphSON v3.
+This task adds a `GraphBinaryWriter` and `GraphBinaryReader` in `commonMain` using
+`kotlinx-io` for platform-portable binary I/O.
+
+== Format Overview
+
+Each value is encoded as:
+
+----
+[type-code: 1 byte] [nullable-flag: 1 byte?] [value-bytes: variable]
+----
+
+Core type codes (subset relevant to TinkerCat):
+
+[cols="1,2,3", options="header"]
+|===
+|Code (hex) |Type |Encoding
+
+|`0x01`
+|`Int`
+|4-byte big-endian signed integer
+
+|`0x02`
+|`Long`
+|8-byte big-endian signed long
+
+|`0x03`
+|`String`
+|4-byte length prefix + UTF-8 bytes
+
+|`0x04`
+|`Double`
+|8-byte IEEE 754 double
+
+|`0x05`
+|`Float`
+|4-byte IEEE 754 float
+
+|`0x0A`
+|`List`
+|4-byte count + repeated typed values
+
+|`0x0B`
+|`Map`
+|4-byte count + repeated key-value pairs
+
+|`0x11`
+|`Vertex`
+|typed ID + typed label string + typed properties
+
+|`0x12`
+|`Edge`
+|typed ID + typed label + out-vertex ref + in-vertex ref + typed properties
+
+|`0x13`
+|`VertexProperty`
+|typed ID + typed key + typed value + typed properties (meta-properties)
+
+|`0x20`
+|`g:Date`
+|8-byte epoch milliseconds
+
+|`0x21`
+|`g:Instant`
+|8-byte epoch seconds + 4-byte nanos
+
+|`0x22`
+|`g:LocalDate`
+|4-byte year + 1-byte month + 1-byte day
+
+|`0x24`
+|`g:Duration`
+|8-byte total seconds + 4-byte nano adjustment
+|===
+
+Full type table: https://tinkerpop.apache.org/docs/3.8.1/dev/io/#graphbinary[GraphBinary spec].
+
+== Implementation Plan
+
+=== 1. Dependencies
+
+[source,kotlin]
+----
+// build.gradle.kts
+commonMain.dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.5.4")
+}
+----
+
+`kotlinx-io` provides `Source` (readable) and `Sink` (writable) interfaces with
+identical APIs on JVM, JS, and Native.
+
+=== 2. `GraphBinaryWriter`
+
+[source,kotlin]
+----
+// commonMain
+class GraphBinaryWriter {
+
+    fun writeGraph(sink: Sink, graph: TinkerCat) {
+        writeValue(sink, graph.vertices().asSequence().toList())
+        writeValue(sink, graph.edges().asSequence().toList())
+    }
+
+    fun writeVertex(sink: Sink, vertex: TinkerVertex) {
+        sink.writeByte(TYPE_VERTEX)
+        writeValue(sink, vertex.id())
+        writeValue(sink, vertex.label())
+        val props = vertex.properties<Any>().asSequence().toList()
+        sink.writeInt(props.size)
+        props.forEach { writeVertexProperty(sink, it as TinkerVertexProperty<Any>) }
+    }
+
+    fun writeEdge(sink: Sink, edge: TinkerEdge) {
+        sink.writeByte(TYPE_EDGE)
+        writeValue(sink, edge.id())
+        writeValue(sink, edge.label())
+        writeVertexRef(sink, edge.outVertex() as TinkerVertex)
+        writeVertexRef(sink, edge.inVertex() as TinkerVertex)
+        val props = edge.properties<Any>().asSequence().toList()
+        sink.writeInt(props.size)
+        props.forEach { writeProperty(sink, it) }
+    }
+
+    fun writeValue(sink: Sink, value: Any?) {
+        when (value) {
+            null              -> { sink.writeByte(TYPE_UNSPECIFIED); sink.writeByte(1) }
+            is Int            -> { sink.writeByte(TYPE_INT);    sink.writeByte(0); sink.writeInt(value) }
+            is Long           -> { sink.writeByte(TYPE_LONG);   sink.writeByte(0); sink.writeLong(value) }
+            is Double         -> { sink.writeByte(TYPE_DOUBLE); sink.writeByte(0); sink.writeLong(value.toBits()) }
+            is Float          -> { sink.writeByte(TYPE_FLOAT);  sink.writeByte(0); sink.writeInt(value.toBits()) }
+            is String         -> { sink.writeByte(TYPE_STRING); sink.writeByte(0); writeString(sink, value) }
+            is Boolean        -> { sink.writeByte(TYPE_BOOLEAN);sink.writeByte(0); sink.writeByte(if (value) 1 else 0) }
+            is List<*>        -> writeList(sink, value)
+            is Map<*, *>      -> writeMap(sink, value)
+            is TinkerVertex   -> writeVertex(sink, value)
+            is TinkerEdge     -> writeEdge(sink, value)
+            is TinkerInstant  -> writeInstant(sink, value)
+            is TinkerLocalDate-> writeLocalDate(sink, value)
+            is TinkerDuration -> writeDuration(sink, value)
+            else              -> throw SerializationException("Unsupported type: ${value::class.simpleName}")
+        }
+    }
+}
+----
+
+=== 3. `GraphBinaryReader`
+
+[source,kotlin]
+----
+// commonMain
+class GraphBinaryReader {
+
+    fun readGraph(source: Source, graph: TinkerCat) {
+        val vertices = readValue(source) as List<*>
+        val edges    = readValue(source) as List<*>
+        vertices.filterIsInstance<Map<*, *>>().forEach { vMap ->
+            // reconstruct vertex from decoded map
+            reconstructVertex(graph, vMap)
+        }
+        edges.filterIsInstance<Map<*, *>>().forEach { eMap ->
+            reconstructEdge(graph, eMap)
+        }
+    }
+
+    fun readValue(source: Source): Any? {
+        val typeCode   = source.readByte()
+        val nullFlag   = if (typeCode != TYPE_UNSPECIFIED) source.readByte() else 1
+        if (nullFlag.toInt() == 1) return null
+        return when (typeCode) {
+            TYPE_INT     -> source.readInt()
+            TYPE_LONG    -> source.readLong()
+            TYPE_DOUBLE  -> Double.fromBits(source.readLong())
+            TYPE_FLOAT   -> Float.fromBits(source.readInt())
+            TYPE_STRING  -> readString(source)
+            TYPE_BOOLEAN -> source.readByte() != 0.toByte()
+            TYPE_LIST    -> readList(source)
+            TYPE_MAP     -> readMap(source)
+            TYPE_VERTEX  -> readVertex(source)
+            TYPE_EDGE    -> readEdge(source)
+            TYPE_INSTANT -> readInstant(source)
+            TYPE_LOCAL_DATE -> readLocalDate(source)
+            TYPE_DURATION -> readDuration(source)
+            else -> throw SerializationException("Unknown type code: 0x${typeCode.toString(16)}")
+        }
+    }
+}
+----
+
+=== 4. `TinkerCat` Integration
+
+[source,kotlin]
+----
+// Convenience extension functions
+fun TinkerCat.writeGraphBinary(sink: Sink) = GraphBinaryWriter().writeGraph(sink, this)
+fun TinkerCat.readGraphBinary(source: Source) = GraphBinaryReader().readGraph(source, this)
+----
+
+=== 5. Coexistence with GraphSON
+
+Both serialisers are available simultaneously.
+The format is selected at the call site:
+
+[source,kotlin]
+----
+// GraphSON (existing)
+GraphSONWriter().writeGraph(outputStream, graph)
+
+// GraphBinary (new)
+graph.writeGraphBinary(outputStream.asSink())
+----
+
+== Test Plan
+
+* `GraphBinaryTest` in `commonTest`:
+  - Round-trip: write → read produces identical graph (same vertex/edge count, IDs, labels, property values)
+  - All primitive types survive round-trip: `Int`, `Long`, `Double`, `Float`, `String`, `Boolean`
+  - Null property value survives round-trip when `allowNullPropertyValues = true`
+  - Temporal types (Task 7.3.1): `TinkerInstant`, `TinkerLocalDate`, `TinkerDuration` round-trip correctly
+  - Empty graph round-trip
+  - Graph with meta-properties (`VertexProperty` with properties) round-trips correctly
+  - Unknown type code raises `SerializationException`
+  - Truncated input raises `EOFException` (from `kotlinx-io`)
+
+== Acceptance Criteria
+
+- [x] `GraphBinaryWriter` and `GraphBinaryReader` implemented in `commonMain`
+- [x] All primitive types, temporal types, `Vertex`, `Edge`, and `VertexProperty` covered
+- [x] Full graph round-trip fidelity (content identical to original)
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/dev/io/#graphbinary[TinkerPop 3.8.1: GraphBinary spec]
+* https://github.com/Kotlin/kotlinx-io[kotlinx-io library]
+* xref:task-3.6.2-graphson-parser.adoc[Task 3.6.2: GraphSON Parser]
+* xref:task-7.3.1-temporal-properties.adoc[Task 7.3.1: Temporal Property Value Support]

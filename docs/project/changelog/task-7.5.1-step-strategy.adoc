@@ -1,0 +1,221 @@
+= Task 7.5.1: TinkerCatStepStrategy — has() Predicate Push-down
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: HIGH +
+*Estimated Effort*: 1–2 weeks +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x `TinkerGraphStepStrategy`
+
+`TinkerCatStepStrategy` is a `TraversalStrategy` that rewrites the step list before
+execution to push `has()` predicates from downstream `HasStep` objects into the seed
+`GraphStep`, allowing the execution engine to use TinkerCat's property indexes instead
+of iterating the full vertex or edge set.
+
+Without this strategy, a traversal like:
+
+[source,kotlin]
+----
+g.V().hasLabel("person").has("age", P.gte(30))
+----
+
+scans every vertex, then filters.
+With the strategy, the `hasLabel` and `has` predicates are folded into `GraphStep`,
+which delegates to `PropertyQueryEngine` and the appropriate `TinkerIndex`.
+
+== Background
+
+=== Existing Index Infrastructure
+
+TinkerCat already provides three index tiers (implemented in Phase 3):
+
+[cols="2,3,2", options="header"]
+|===
+|Index type |Data structure |Best for
+
+|`TinkerIndex` (exact)
+|`HashMap<value, List<Element>>`
+|Equality lookups — `has("name", "alice")`
+
+|`CompositeIndex`
+|`HashMap<Pair<value1,value2>, List<Element>>`
+|Multi-key equality — `has("label","person").has("country","US")`
+
+|`RangeIndex`
+|`TreeMap<value, List<Element>>`
+|Range predicates — `P.gte(30)`, `P.between(20, 40)`
+|===
+
+`PropertyQueryEngine.queryVertices(criterion)` and `queryEdges(criterion)` already
+consume these indexes.
+`TinkerCatStepStrategy` connects the traversal engine to that existing layer.
+
+== Implementation Plan
+
+=== 1. Strategy Entry Point
+
+[source,kotlin]
+----
+// commonMain
+class TinkerCatStepStrategy : TraversalStrategy {
+
+    override val priority: Int = TraversalStrategy.PROVIDER_OPTIMIZATION_PRIORITY
+
+    override fun apply(traversal: GraphTraversal<*, *>) {
+        val graphStep = traversal.steps.firstOrNull { it is GraphStep<*> }
+            as? GraphStep<*> ?: return
+
+        val hasSteps = traversal.steps
+            .takeWhile { it is HasStep<*> || it is HasLabelStep }
+            .filterIsInstance<HasStep<*>>()
+
+        if (hasSteps.isEmpty()) return
+
+        // Fold predicates into the GraphStep
+        hasSteps.forEach { hs ->
+            graphStep.addHasContainers(hs.hasContainers)
+        }
+
+        // Remove the now-redundant HasSteps from the pipeline
+        hasSteps.forEach { traversal.removeStep(it) }
+    }
+}
+----
+
+=== 2. `GraphStep` Extension for Index Look-up
+
+`GraphStep` gains a list of `HasContainer` objects.
+When the step is pulled for the first time, it resolves these containers against the
+index layer instead of performing a full scan:
+
+[source,kotlin]
+----
+class GraphStep<E : Element>(
+    private val graph: TinkerCat,
+    private val elementClass: KClass<E>,
+    private val ids: Array<out Any?>
+) : FlatMapStep<Any?, E>() {
+
+    internal val hasContainers = mutableListOf<HasContainer>()
+
+    fun addHasContainers(containers: List<HasContainer>) {
+        hasContainers += containers
+    }
+
+    override fun flatMap(traverser: Traverser<Any?>): Iterator<E> {
+        if (hasContainers.isEmpty()) {
+            return if (elementClass == Vertex::class) graph.vertices(*ids) as Iterator<E>
+                   else                               graph.edges(*ids)   as Iterator<E>
+        }
+        return indexLookup()
+    }
+
+    private fun indexLookup(): Iterator<E> {
+        val engine = graph.propertyQueryEngine()
+        val criteria = hasContainers.map { it.toPropertyCriterion() }
+        @Suppress("UNCHECKED_CAST")
+        return when (elementClass) {
+            Vertex::class -> engine.queryVertices(criteria) as Iterator<E>
+            else          -> engine.queryEdges(criteria)   as Iterator<E>
+        }
+    }
+}
+----
+
+=== 3. `HasContainer` → `PropertyCriterion` Conversion
+
+[source,kotlin]
+----
+fun HasContainer.toPropertyCriterion(): PropertyQueryEngine.PropertyCriterion =
+    when {
+        predicate is P.Eq<*>  -> ExactCriterion(key, predicate.value)
+        predicate is P.Gte<*> -> RangeCriterion(key, predicate.value as Comparable<*>, null, true, false)
+        predicate is P.Gt<*>  -> RangeCriterion(key, predicate.value as Comparable<*>, null, false, false)
+        predicate is P.Lte<*> -> RangeCriterion(key, null, predicate.value as Comparable<*>, false, true)
+        predicate is P.Lt<*>  -> RangeCriterion(key, null, predicate.value as Comparable<*>, false, false)
+        predicate is P.Between<*> -> {
+            val (lo, hi) = predicate.values
+            RangeCriterion(key, lo as Comparable<*>, hi as Comparable<*>, true, false)
+        }
+        else -> ExactCriterion(key, predicate.value)  // fallback: equality scan
+    }
+----
+
+=== 4. Label Push-down
+
+`hasLabel()` containers are handled separately: if the graph has a label index (TinkerCat
+always maintains `vertices.byLabel` and `edges.byLabel` maps), the label filter is
+resolved before property predicates:
+
+[source,kotlin]
+----
+private fun indexLookup(): Iterator<E> {
+    val labelContainers = hasContainers.filter { it.key == T.label.accessor }
+    val propContainers  = hasContainers - labelContainers.toSet()
+
+    val seeds: Sequence<E> = if (labelContainers.isNotEmpty()) {
+        val label = labelContainers.first().predicate.value as String
+        graph.verticesByLabel(label) as Sequence<E>
+    } else {
+        graph.vertices() as Sequence<E>
+    }
+
+    return seeds.filter { element ->
+        propContainers.all { hc -> hc.predicate.test(element.value(hc.key)) }
+    }.iterator()
+}
+----
+
+=== 5. Strategy Registration
+
+`TinkerCatStepStrategy` is registered by default on `GraphTraversalSource.open()`:
+
+[source,kotlin]
+----
+fun TinkerCat.traversal(): GraphTraversalSource =
+    GraphTraversalSource(this)
+        .withStrategies(TinkerCatStepStrategy(), TinkerCatCountStrategy())
+----
+
+== Performance Benchmark
+
+The acceptance criterion requires a ≥50% reduction in vertex scans on an indexed graph.
+A micro-benchmark in `jvmTest` (using JMH):
+
+[source,kotlin]
+----
+// 100 000 person vertices, age 1–100, indexed on "age"
+// Query: g.V().hasLabel("person").has("age", P.gte(90))
+// Expected: ~10 000 results, only 10 000 vertices touched (not 100 000)
+----
+
+== Test Plan
+
+* `TinkerCatStepStrategyTest` in `commonTest`:
+  - Has-containers are folded into `GraphStep` and redundant `HasStep` removed
+  - Exact-match query uses `TinkerIndex` (verify via spy on `PropertyQueryEngine`)
+  - Range query uses `RangeIndex`
+  - Composite query uses `CompositeIndex` when available
+  - Label-only query uses label map
+  - Traversal without matching indexes falls back to full scan with predicate filtering
+  - Strategy is idempotent (applying twice does not break the traversal)
+
+== Acceptance Criteria
+
+- [x] `has()` predicates folded into `GraphStep` by the strategy
+- [x] Vertex scans reduced by ≥50% on indexed graphs (benchmark)
+- [x] Fallback to full scan when no index covers the predicate
+- [x] Strategy is registered by default on `GraphTraversalSource`
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/dev/provider/#_tinkergraphstepstrategy[TinkerPop 3.8.1: TinkerGraphStepStrategy]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.5.2-count-strategy.adoc[Task 7.5.2: TinkerCatCountStrategy]

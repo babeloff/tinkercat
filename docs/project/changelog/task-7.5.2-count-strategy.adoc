@@ -1,0 +1,172 @@
+= Task 7.5.2: TinkerCatCountStrategy — Short-circuit Count
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 3–5 days +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine], xref:task-7.5.1-step-strategy.adoc[Task 7.5.1: TinkerCatStepStrategy] +
+*Upstream Reference*: TinkerPop 3.8.x `TinkerGraphCountStrategy`
+
+`TinkerCatCountStrategy` is a `TraversalStrategy` that detects the pattern
+`g.V().count()` (or `g.E().count()`) and replaces it with a direct map-size read
+instead of iterating every element.
+
+TinkerCat stores all vertices in a `HashMap<Any, TinkerVertex>` and all edges in a
+`HashMap<Any, TinkerEdge>`.
+Counting either map is O(1); iterating and counting is O(n).
+For a graph with 1 000 000 vertices, this is the difference between a nanosecond
+and a millisecond.
+
+== Applicable Patterns
+
+[cols="2,3", options="header"]
+|===
+|Traversal |Short-circuit applied?
+
+|`g.V().count()`
+|Yes — reads `graph.vertices.size`
+
+|`g.E().count()`
+|Yes — reads `graph.edges.size`
+
+|`g.V().hasLabel("person").count()`
+|Yes (if label index present) — reads `graph.verticesByLabel("person").size`
+
+|`g.V().has("age", 30).count()`
+|No — requires full index scan; strategy does not apply
+
+|`g.V().out().count()`
+|No — traversal steps prevent short-circuit
+
+|`g.V().count().is(P.gt(100))`
+|Partially — count is short-circuited, `is()` still applied to the scalar result
+|===
+
+== Implementation Plan
+
+=== 1. Pattern Matching
+
+[source,kotlin]
+----
+class TinkerCatCountStrategy : TraversalStrategy {
+
+    override val priority: Int = TraversalStrategy.PROVIDER_OPTIMIZATION_PRIORITY - 1
+
+    override fun apply(traversal: GraphTraversal<*, *>) {
+        val steps = traversal.steps
+
+        // Pattern: GraphStep → CountGlobalStep (with nothing in between, or only HasLabelStep)
+        val graphStepIdx = steps.indexOfFirst { it is GraphStep<*> }
+        if (graphStepIdx < 0) return
+
+        val countStepIdx = steps.indexOfFirst { it is CountGlobalStep }
+        if (countStepIdx < 0) return
+
+        val between = steps.subList(graphStepIdx + 1, countStepIdx)
+        val labelOnlyFilters = between.all { it is HasLabelStep }
+        if (!labelOnlyFilters) return
+
+        val graphStep = steps[graphStepIdx] as GraphStep<*>
+        val labelStep = between.filterIsInstance<HasLabelStep>().firstOrNull()
+
+        // Replace the matched segment with a DirectCountStep
+        val directCount = DirectCountStep(graphStep.graph, graphStep.elementClass, labelStep?.label)
+        traversal.replaceSteps(graphStepIdx, countStepIdx, directCount)
+    }
+}
+----
+
+=== 2. `DirectCountStep`
+
+[source,kotlin]
+----
+class DirectCountStep(
+    private val graph: TinkerCat,
+    private val elementClass: KClass<out Element>,
+    private val label: String?
+) : MapStep<Any?, Long>() {
+
+    override fun map(traverser: Traverser<Any?>): Long {
+        return when {
+            elementClass == Vertex::class && label != null ->
+                graph.verticesByLabel(label).size.toLong()
+
+            elementClass == Vertex::class ->
+                graph.vertexCount().toLong()
+
+            elementClass == Edge::class && label != null ->
+                graph.edgesByLabel(label).size.toLong()
+
+            else ->
+                graph.edgeCount().toLong()
+        }
+    }
+}
+----
+
+`TinkerCat.vertexCount()` and `edgeCount()` are simple property accessors that return
+`vertices.size` and `edges.size` respectively:
+
+[source,kotlin]
+----
+// In TinkerCat
+fun vertexCount(): Int = vertices.size
+fun edgeCount(): Int = edges.size
+----
+
+=== 3. Interaction with `discard()` (Task 7.4.6)
+
+When the terminal step is `discard()` rather than `count()`, the strategy may also
+eliminate `order()`, `dedup()`, and other stateful non-side-effect steps, since
+ordering and deduplication are irrelevant when results are discarded.
+This optimisation is applied as a secondary pass within the same strategy.
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+
+// O(1) — direct map read
+val totalVertices = g.V().count().next()
+
+// O(1) — label index read
+val personCount = g.V().hasLabel("person").count().next()
+
+// O(1) — edge map read
+val totalEdges = g.E().count().next()
+
+// NOT short-circuited — falls through to standard execution
+val filteredCount = g.V().has("age", P.gte(30)).count().next()
+----
+
+== Test Plan
+
+* `TinkerCatCountStrategyTest` in `commonTest`:
+  - `g.V().count()` result matches `graph.vertexCount()`
+  - `g.E().count()` result matches `graph.edgeCount()`
+  - `g.V().hasLabel("person").count()` matches label-map size
+  - Strategy not applied when non-label `has()` steps are present
+  - Strategy not applied when traversal steps (`out()`, `in()`, etc.) are present
+  - Count result is still correct after graph mutations (vertex added / removed)
+  - Strategy is idempotent
+
+== Acceptance Criteria
+
+- [x] `g.V().count()` and `g.E().count()` are O(1) operations
+- [x] `g.V().hasLabel(L).count()` uses label index when available
+- [x] Strategy does not apply to traversals with non-label filter or traversal steps
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/dev/provider/#_tinkergraphcountstrategy[TinkerPop 3.8.1: TinkerGraphCountStrategy]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.5.1-step-strategy.adoc[Task 7.5.1: TinkerCatStepStrategy]
+* xref:task-7.4.6-discard-step.adoc[Task 7.4.6: discard() Step]

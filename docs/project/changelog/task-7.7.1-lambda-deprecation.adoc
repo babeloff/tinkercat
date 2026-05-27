@@ -1,0 +1,208 @@
+= Task 7.7.1: Lambda Deprecation for GLV Compatibility
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 1 week +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x lambda deprecation
+
+TinkerPop 3.8.x formally deprecated all traversal DSL overloads that accept Groovy or
+Kotlin *lambdas* (anonymous functions) as arguments to `filter()`, `map()`,
+`sideEffect()`, `by()`, and related steps.
+
+The reason is Gremlin Language Variant (GLV) compatibility: lambdas cannot be
+serialised and transmitted to a Gremlin Server.
+Traversals that contain lambdas execute only in the local JVM process, silently
+bypassing the server.
+By deprecating these overloads, TinkerPop pushes users toward anonymous traversals
+(`__.*`) which are serialisable.
+
+This task mirrors that deprecation in TinkerCat's Kotlin DSL.
+
+== Background
+
+=== Problematic Lambda Overloads
+
+[cols="2,3", options="header"]
+|===
+|Method signature |Why problematic
+
+|`filter(predicate: (Traverser<E>) -> Boolean)`
+|Lambda cannot be sent to Gremlin Server
+
+|`map(function: (Traverser<E>) -> R)`
+|Produces a local-only traversal
+
+|`sideEffect(consumer: (Traverser<E>) -> Unit)`
+|Side effects happen only in-process
+
+|`by(function: (E) -> Any?)`
+|Used as a modulator; not serialisable
+
+|`order().by(comparator: Comparator<E>)`
+|Kotlin `Comparator` not serialisable
+|===
+
+=== Non-Lambda Replacements
+
+[cols="2,3", options="header"]
+|===
+|Lambda form (deprecated) |Anonymous-traversal replacement
+
+|`filter { it.get().age > 30 }`
+|`filter(__.values("age").is(P.gt(30)))`
+
+|`map { it.get().name.uppercase() }`
+|`.values("name").toUpper()` (after Task 7.4.2)
+
+|`sideEffect { println(it.get()) }`
+|`sideEffect(__.identity())` + external `forEach` on result
+
+|`by { it.name }`
+|`by("name")`
+
+|`order().by(compareBy { it.age })`
+|`order().by("age", Order.asc)`
+|===
+
+== Implementation Plan
+
+=== 1. Add `@Deprecated` Annotations
+
+Mark each lambda overload with `@Deprecated(level = DeprecationLevel.WARNING)`:
+
+[source,kotlin]
+----
+@Deprecated(
+    message = "Lambda steps are not serialisable and cannot be sent to a Gremlin Server. " +
+              "Use anonymous traversal overloads instead (e.g. filter(__.has(...))).",
+    replaceWith = ReplaceWith("filter(traversal)"),
+    level = DeprecationLevel.WARNING
+)
+fun <S, E> GraphTraversal<S, E>.filter(
+    predicate: (Traverser<E>) -> Boolean
+): GraphTraversal<S, E>
+
+@Deprecated(
+    message = "Lambda steps are not serialisable. Use anonymous traversal overloads.",
+    replaceWith = ReplaceWith("map(traversal)"),
+    level = DeprecationLevel.WARNING
+)
+fun <S, E, R> GraphTraversal<S, E>.map(
+    function: (Traverser<E>) -> R
+): GraphTraversal<S, R>
+
+@Deprecated(
+    message = "Lambda steps are not serialisable. Use anonymous traversal overloads.",
+    replaceWith = ReplaceWith("sideEffect(traversal)"),
+    level = DeprecationLevel.WARNING
+)
+fun <S, E> GraphTraversal<S, E>.sideEffect(
+    consumer: (Traverser<E>) -> Unit
+): GraphTraversal<S, E>
+----
+
+=== 2. Escalation Schedule
+
+Follow TinkerPop's own escalation timeline:
+
+[cols="1,2,2", options="header"]
+|===
+|Release |Deprecation level |Impact
+
+|First release after Task 7.1.1
+|`WARNING` — compiler warning, code still compiles
+|Developers see IDE hints
+
+|Following major release
+|`ERROR` — compile error
+|Breaks existing callers; forces migration
+
+|Second major release
+|Remove overloads entirely
+|Clean API surface
+|===
+
+=== 3. Migration Guide in Documentation
+
+Update `docs/how-to/migrate-from-java.adoc` with a new section:
+
+[source,asciidoc]
+----
+== Migrating lambda steps to anonymous traversals
+
+Lambda-based filter steps produce traversals that cannot be sent to a Gremlin Server.
+Replace:
+
+[source,kotlin]
+----
+g.V().filter { it.get().label() == "person" }
+----
+
+With:
+
+[source,kotlin]
+----
+g.V().hasLabel("person")
+----
+
+Or using `__` anonymous traversal:
+
+[source,kotlin]
+----
+g.V().filter(__.hasLabel("person"))
+----
+----
+
+=== 4. Lint Rule (optional)
+
+Consider adding a custom `detekt` rule `NoLambdaSteps` that flags lambda-based step
+calls at static analysis time, before compilation:
+
+[source,kotlin]
+----
+class NoLambdaSteps : Rule() {
+    override val issue = Issue(
+        javaClass.simpleName,
+        Severity.Warning,
+        "Lambda steps are not serialisable. Use anonymous traversal overloads.",
+        Debt.FIVE_MINS
+    )
+    override fun visitCallExpression(expression: KtCallExpression) {
+        val callee = expression.calleeExpression?.text ?: return
+        if (callee in LAMBDA_STEP_NAMES && expression.lambdaArguments.isNotEmpty()) {
+            report(CodeSmell(issue, Entity.from(expression), issue.description))
+        }
+    }
+    companion object {
+        val LAMBDA_STEP_NAMES = setOf("filter", "map", "sideEffect", "by")
+    }
+}
+----
+
+== Test Plan
+
+* `LambdaDeprecationTest` in `commonTest`:
+  - Deprecated lambda overloads still compile and produce correct results at `WARNING` level
+  - Anonymous traversal replacements produce identical results
+  - Kotlin compiler emits deprecation warnings (verified via `@OptIn` suppression test)
+
+== Acceptance Criteria
+
+- [x] All lambda-accepting step overloads marked `@Deprecated(level = WARNING)`
+- [x] `replaceWith` annotation provides correct anonymous-traversal equivalent
+- [x] Migration guide updated in `docs/how-to/`
+- [x] Existing tests that use lambda steps compile with `-Werror` suppressed
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/upgrade/#_lambda_deprecations[TinkerPop 3.8.1 Upgrade Notes: Lambda Deprecations]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.4.2-string-steps.adoc[Task 7.4.2: String Manipulation Steps]

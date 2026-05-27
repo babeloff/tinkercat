@@ -1,0 +1,793 @@
+= TinkerCat-Gremlin Reference
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Introduction
+
+TinkerCat is the in-memory reference graph implementation for the TinkerCat Kotlin Multiplatform library.
+It is the Kotlin equivalent of Apache TinkerPop's TinkerGraph: a lightweight, embedded, in-memory store that
+requires no external server, no configuration file, and no schema definition to get started.
+
+TinkerCat exposes the same structural API as TinkerPop's `Graph` interface — vertices, edges, properties,
+vertex properties, and graph variables — but targets three runtimes from a single shared Kotlin codebase:
+JVM, JavaScript (Node.js / browser), and Native.
+
+Because TinkerCat does not yet bundle a Gremlin traversal engine, graph traversal is expressed directly
+through Kotlin's standard `Iterator` and `Sequence` APIs plus the built-in `PropertyQueryEngine`.
+The conceptual mapping from Gremlin step notation to idiomatic Kotlin is shown throughout this document.
+
+[NOTE]
+====
+If you are migrating an existing project from the Java TinkerGraph implementation, see
+xref:../how-to/migrate-from-java.adoc[Migrate from Java TinkerCat] for a step-by-step guide.
+====
+
+== Opening a Graph
+
+The primary entry point is `TinkerCat.open()`.
+No configuration is required for basic use.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
+
+// Default configuration — no arguments required
+val graph = TinkerCat.open()
+
+// With explicit configuration
+val graph = TinkerCat.open(mapOf(
+    TinkerCat.GREMLIN_TINKERCAT_DEFAULT_VERTEX_PROPERTY_CARDINALITY to "list"
+))
+----
+
+On the JVM, `TinkerCatFactory` provides a reflection-safe alternative in environments
+where companion-object access can be unreliable across multiplatform module boundaries:
+
+[source,kotlin]
+----
+// JVM only
+import org.apache.tinkerpop.gremlin.tinkercat.factory.TinkerCatFactory
+
+val graph = TinkerCatFactory.create()
+val graph = TinkerCatFactory.create(mapOf(
+    TinkerCat.GREMLIN_TINKERCAT_ALLOW_NULL_PROPERTY_VALUES to true
+))
+----
+
+== Configuration
+
+TinkerCat accepts a `Map<String, Any?>` at construction time.
+The available keys are defined as constants on the `TinkerCat` companion object.
+
+[cols="2,1,4", options="header"]
+|===
+|Key constant |Default |Description
+
+|`GREMLIN_TINKERCAT_ALLOW_NULL_PROPERTY_VALUES`
+ (`"gremlin.tinkerGraph.allowNullPropertyValues"`)
+|`false`
+|When `true`, property values may be `null`.
+By default any attempt to store a `null` value throws an exception.
+
+|`GREMLIN_TINKERCAT_DEFAULT_VERTEX_PROPERTY_CARDINALITY`
+ (`"gremlin.tinkerGraph.defaultVertexPropertyCardinality"`)
+|`"SINGLE"`
+|Default cardinality applied when a vertex property is set without an explicit
+`VertexProperty.Cardinality` argument.
+Accepted values: `"SINGLE"`, `"LIST"`, `"SET"`.
+
+|`GREMLIN_TINKERCAT_GRAPH_LOCATION`
+ (`"gremlin.tinkerGraph.graphLocation"`)
+|`null`
+|Reserved for future persistence support.
+
+|`GREMLIN_TINKERCAT_GRAPH_FORMAT`
+ (`"gremlin.tinkerGraph.graphFormat"`)
+|`null`
+|Reserved for future persistence support.
+|===
+
+=== Graph Features
+
+`graph.features()` describes what the current runtime supports.
+
+[source,kotlin]
+----
+val f = graph.features()
+println(f.graph().supportsTransactions())     // false
+println(f.graph().supportsConcurrentAccess()) // false
+println(f.vertex().supportsMetaProperties())  // true
+println(f.vertex().supportsMultiProperties()) // true
+println(f.vertex().supportsUserSuppliedIds()) // true
+----
+
+== Sample Graphs
+
+TinkerPop distributions include several named "toy" graphs for learning and testing.
+TinkerCat does not yet ship a `TinkerFactory`, but the standard toy graphs can be
+constructed in a few lines.
+These examples follow the same property schema used in the official TinkerPop documentation.
+
+=== The Modern Graph
+
+The Modern graph contains six vertices and six edges and is the primary reference graph
+in TinkerPop examples.
+
+[source]
+----
+          age  name
+v1 person  29   marko ──knows(0.5)──▶ v2 person  27  vadas
+  │                                   v3 software     lop
+  ├─knows(1.0)──────────────────────▶ v4 person   32  josh
+  └─created(0.4)────────────────────▶ v3
+v4 ──created(1.0)────────────────────▶ v5 software    ripple
+   ──created(0.4)────────────────────▶ v3
+v6 person  35  peter ──created(0.2)──▶ v3
+----
+
+[source,kotlin]
+----
+fun createModernGraph(): TinkerCat {
+    val graph = TinkerCat.open()
+
+    // Vertices
+    val marko  = graph.addVertex("id", 1, "label", "person",   "name", "marko",  "age", 29)
+    val vadas  = graph.addVertex("id", 2, "label", "person",   "name", "vadas",  "age", 27)
+    val lop    = graph.addVertex("id", 3, "label", "software", "name", "lop",    "lang", "java")
+    val josh   = graph.addVertex("id", 4, "label", "person",   "name", "josh",   "age", 32)
+    val ripple = graph.addVertex("id", 5, "label", "software", "name", "ripple", "lang", "java")
+    val peter  = graph.addVertex("id", 6, "label", "person",   "name", "peter",  "age", 35)
+
+    // Edges
+    marko.addEdge("knows",   vadas,  "id", 7,  "weight", 0.5)
+    marko.addEdge("knows",   josh,   "id", 8,  "weight", 1.0)
+    marko.addEdge("created", lop,    "id", 9,  "weight", 0.4)
+    josh.addEdge( "created", ripple, "id", 10, "weight", 1.0)
+    josh.addEdge( "created", lop,    "id", 11, "weight", 0.4)
+    peter.addEdge("created", lop,    "id", 12, "weight", 0.2)
+
+    return graph
+}
+----
+
+=== The Classic Graph
+
+The Classic graph is the predecessor to the Modern graph and uses floating-point ages
+instead of integers.
+
+[source,kotlin]
+----
+fun createClassicGraph(): TinkerCat {
+    val graph = TinkerCat.open()
+
+    val marko  = graph.addVertex("id", 1, "label", "vertex", "name", "marko",  "age", 29f)
+    val vadas  = graph.addVertex("id", 2, "label", "vertex", "name", "vadas",  "age", 27f)
+    val lop    = graph.addVertex("id", 3, "label", "vertex", "name", "lop",    "lang", "java")
+    val josh   = graph.addVertex("id", 4, "label", "vertex", "name", "josh",   "age", 32f)
+    val ripple = graph.addVertex("id", 5, "label", "vertex", "name", "ripple", "lang", "java")
+    val peter  = graph.addVertex("id", 6, "label", "vertex", "name", "peter",  "age", 35f)
+
+    marko.addEdge("knows",   vadas,  "id", 7,  "weight", 0.5f)
+    marko.addEdge("knows",   josh,   "id", 8,  "weight", 1.0f)
+    marko.addEdge("created", lop,    "id", 9,  "weight", 0.4f)
+    josh.addEdge( "created", ripple, "id", 10, "weight", 1.0f)
+    josh.addEdge( "created", lop,    "id", 11, "weight", 0.4f)
+    peter.addEdge("created", lop,    "id", 12, "weight", 0.2f)
+
+    return graph
+}
+----
+
+== Graph Structure API
+
+=== Vertices
+
+[source,kotlin]
+----
+// Add a vertex with a label
+val v = graph.addVertex("person")
+
+// Add a vertex with inline key/value properties
+val v = graph.addVertex("label", "person", "name", "Alice", "age", 30)
+
+// Add a vertex with a map
+val v = graph.addVertex(mapOf("label" to "person", "name" to "Alice"))
+
+// Look up a vertex by ID
+val v: Vertex? = graph.vertex(1)
+
+// Iterate all vertices
+graph.vertices().forEach { v -> println(v.id()) }
+
+// Iterate specific vertices by ID
+graph.vertices(1, 4, 6).forEach { v -> println(v.value<String>("name")) }
+----
+
+=== Edges
+
+[source,kotlin]
+----
+// Add a directed edge from outVertex to inVertex
+val e = marko.addEdge("knows", vadas)
+
+// Add an edge with properties
+val e = marko.addEdge("knows", vadas, "weight", 0.5, "since", 2010)
+
+// Look up an edge by ID
+val e: Edge? = graph.edge(7)
+
+// Iterate all edges
+graph.edges().forEach { e -> println("${e.outVertex().id()} -> ${e.inVertex().id()}") }
+----
+
+=== Properties
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.structure.Direction
+
+// Read a typed property value
+val name: String? = v.value<String>("name")
+val age:  Int?    = v.value<Int>("age")
+
+// Set a property
+v.property("city", "Nashville")
+
+// Check whether a property exists
+val hasAge = v.property<Int>("age").isPresent
+
+// Iterate all property keys on a vertex
+v.keys().forEach { key -> println("$key = ${v.value<Any>(key)}") }
+
+// Remove a property
+v.property<String>("city").remove()
+----
+
+=== Edge Traversal
+
+Adjacency-list traversal starts from a vertex using `edges()` and `vertices()`.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.structure.Direction
+
+// All outgoing edges
+marko.edges(Direction.OUT)
+
+// Outgoing edges with a specific label
+marko.edges(Direction.OUT, "knows")
+
+// Both directions
+marko.edges(Direction.BOTH)
+
+// Vertices reachable by outgoing "knows" edges (one hop)
+val friends: Iterator<Vertex> = marko.vertices(Direction.OUT, "knows")
+
+// Collect as a list
+val friendNames = marko.vertices(Direction.OUT, "knows")
+    .asSequence()
+    .map { it.value<String>("name") }
+    .toList()
+// → ["vadas", "josh"]
+----
+
+=== Vertex Properties (Multi-Properties and Meta-Properties)
+
+TinkerCat supports the full TinkerPop vertex-property model.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.structure.VertexProperty
+
+// Multi-valued property (LIST cardinality)
+val v = graph.addVertex("document")
+v.property(VertexProperty.Cardinality.LIST, "tag", "kotlin")
+v.property(VertexProperty.Cardinality.LIST, "tag", "graph")
+v.property(VertexProperty.Cardinality.LIST, "tag", "multiplatform")
+
+// Retrieve all values for a multi-property key
+val tags: List<String> = v.properties<String>("tag")
+    .asSequence()
+    .map { it.value() }
+    .toList()
+// → ["kotlin", "graph", "multiplatform"]
+
+// Meta-properties: properties on vertex properties
+val nameVP = v.property(VertexProperty.Cardinality.SINGLE, "name", "TinkerCat")
+nameVP.property("source",     "release-notes")
+nameVP.property("confidence", 0.99)
+
+val source: String? = nameVP.value<String>("source")
+----
+
+== Graph Traversal Patterns
+
+TinkerCat uses standard Kotlin `Iterator` and `Sequence` APIs for traversal.
+The table below shows common Gremlin step patterns and their TinkerCat equivalents.
+
+[cols="1,1", options="header"]
+|===
+|Gremlin |TinkerCat (Kotlin)
+
+|`g.V()`
+|`graph.vertices().asSequence()`
+
+|`g.E()`
+|`graph.edges().asSequence()`
+
+|`g.V(1)`
+|`graph.vertices(1).asSequence()`
+
+|`g.V().hasLabel("person")`
+|`graph.vertices().asSequence().filter { it.label() == "person" }`
+
+|`g.V().has("name", "marko")`
+|`graph.vertices().asSequence().filter { it.value<String>("name") == "marko" }`
+
+|`g.V().values("name")`
+|`graph.vertices().asSequence().map { it.value<String>("name") }`
+
+|`g.V(1).out("knows")`
+|`graph.vertex(1)!!.vertices(Direction.OUT, "knows")`
+
+|`g.V(1).out("knows").values("name")`
+|`graph.vertex(1)!!.vertices(Direction.OUT, "knows").asSequence().map { it.value<String>("name") }`
+
+|`g.V().count()`
+|`graph.vertices().asSequence().count()`
+
+|`g.V().has("age", P.gte(30))`
+|`graph.vertices().asSequence().filter { (it.value<Int>("age") ?: 0) >= 30 }`
+
+|`g.V().dedup().limit(5)`
+|`graph.vertices().asSequence().distinct().take(5)`
+|===
+
+=== Worked Examples on the Modern Graph
+
+[source,kotlin]
+----
+val graph = createModernGraph()
+
+// Who does marko know? (g.V(1).out("knows").values("name"))
+val marko = graph.vertex(1)!!
+val knownNames = marko.vertices(Direction.OUT, "knows")
+    .asSequence()
+    .map { it.value<String>("name") }
+    .toList()
+// → ["vadas", "josh"]
+
+// What did marko create? (g.V(1).out("created").values("name"))
+val createdNames = marko.vertices(Direction.OUT, "created")
+    .asSequence()
+    .map { it.value<String>("name") }
+    .toList()
+// → ["lop"]
+
+// Who are the co-creators of lop?
+// (g.V(3).in("created").values("name"))
+val lop = graph.vertex(3)!!
+val creators = lop.vertices(Direction.IN, "created")
+    .asSequence()
+    .map { it.value<String>("name") }
+    .toList()
+// → ["marko", "josh", "peter"]
+
+// People older than 30
+val seniors = graph.vertices()
+    .asSequence()
+    .filter { it.label() == "person" }
+    .filter { (it.value<Int>("age") ?: 0) > 30 }
+    .map { it.value<String>("name") }
+    .toList()
+// → ["josh", "peter"]
+
+// Two-hop: friends-of-friends
+val fof = marko.vertices(Direction.OUT, "knows")
+    .asSequence()
+    .flatMap { friend -> friend.vertices(Direction.OUT, "knows").asSequence() }
+    .map { it.value<String>("name") }
+    .distinct()
+    .toList()
+
+// Edges with high weight
+val strongEdges = graph.edges()
+    .asSequence()
+    .filter { (it.value<Double>("weight") ?: 0.0) >= 1.0 }
+    .map { "${it.outVertex().value<String>("name")} -[${it.label()}]-> ${it.inVertex().value<String>("name")}" }
+    .toList()
+// → ["marko -[knows]-> josh", "josh -[created]-> ripple"]
+----
+
+=== Path Walking
+
+[source,kotlin]
+----
+// Collect all vertices reachable within two hops from marko
+fun reachable(start: Vertex, maxHops: Int): Set<Vertex> {
+    val visited = mutableSetOf<Vertex>()
+    val queue = ArrayDeque<Pair<Vertex, Int>>()
+    queue.add(start to 0)
+    while (queue.isNotEmpty()) {
+        val (v, depth) = queue.removeFirst()
+        if (v in visited || depth > maxHops) continue
+        visited += v
+        v.vertices(Direction.OUT).forEach { neighbor ->
+            queue.add(neighbor to depth + 1)
+        }
+    }
+    return visited
+}
+----
+
+== Property Querying
+
+For more complex filtering, `PropertyQueryEngine` exposes a typed criterion API
+that automatically exploits available indexes.
+
+[source,kotlin]
+----
+val qe = graph.propertyQueryEngine()
+----
+
+=== Exact Match
+
+[source,kotlin]
+----
+val users = qe.queryVertices(
+    PropertyQueryEngine.ExactCriterion("status", "active")
+).asSequence().toList()
+----
+
+=== Range Queries
+
+`RangeCriterion` uses inclusive lower / exclusive upper semantics (matching TinkerPop's `P.between`).
+
+[source,kotlin]
+----
+// Age in [18, 65)
+val adults = qe.queryVertices(
+    PropertyQueryEngine.RangeCriterion(
+        key = "age",
+        minValue = 18, maxValue = 65,
+        minInclusive = true, maxInclusive = false
+    )
+).asSequence().toList()
+
+// No upper bound (age >= 30)
+val seniors = qe.queryVertices(
+    PropertyQueryEngine.RangeCriterion("age", 30, null, true, false)
+).asSequence().toList()
+----
+
+=== Composite Queries
+
+Multiple criteria are combined with AND semantics by default.
+
+[source,kotlin]
+----
+val activeAdults = qe.queryVertices(listOf(
+    PropertyQueryEngine.ExactCriterion("status", "active"),
+    PropertyQueryEngine.RangeCriterion("age", 18, 65, true, false)
+)).asSequence().toList()
+----
+
+=== Pattern Matching
+
+`findVerticesWithPropertyPattern` accepts an arbitrary predicate over the stored value.
+
+[source,kotlin]
+----
+// Vertices whose "skills" list contains "kotlin"
+val kotlinDevs = qe.findVerticesWithPropertyPattern("skills") { value ->
+    value is List<*> && value.contains("kotlin")
+}.asSequence().toList()
+----
+
+== Indexing
+
+Indexes trade memory for query performance.
+All index operations are O(n) to build and O(1) or O(log n + k) to query.
+
+=== Single-Property Index
+
+Best for equality lookups on a frequently queried key.
+
+[source,kotlin]
+----
+// Create before or after loading data — both work
+graph.createIndex("name", Vertex::class)
+graph.createIndex("email", Vertex::class)
+
+// Verify which keys are indexed
+val indexed: Set<String> = graph.getIndexedKeys(Vertex::class)
+
+// Remove an index
+graph.dropIndex("email", Vertex::class)
+----
+
+=== Composite Index
+
+Accelerates queries that always filter on a fixed set of keys together.
+
+[source,kotlin]
+----
+graph.createCompositeIndex(listOf("department", "role"), Vertex::class)
+
+// Or using the vararg form
+graph.createCompositeIndex(Vertex::class, "department", "role")
+
+// Drop
+graph.dropCompositeIndex(listOf("department", "role"), Vertex::class)
+----
+
+=== Range Index
+
+Required for efficient `RangeCriterion` queries.
+The indexed property values must implement `Comparable`.
+
+[source,kotlin]
+----
+graph.createRangeIndex("age",    Vertex::class)
+graph.createRangeIndex("salary", Vertex::class)
+graph.createRangeIndex("weight", Edge::class)
+
+// Drop
+graph.dropRangeIndex("salary", Vertex::class)
+----
+
+=== Index Selection Summary
+
+[cols="2,3", options="header"]
+|===
+|Index type |Use when…
+
+|Single-property (`createIndex`)
+|Queries filter on one property with exact equality.
+
+|Composite (`createCompositeIndex`)
+|Queries always filter on the same combination of two or more properties.
+
+|Range (`createRangeIndex`)
+|Queries filter on numeric or date ranges using `RangeCriterion`.
+|===
+
+== Graph Variables
+
+Graph variables attach metadata at the graph level (not on any vertex or edge).
+
+[source,kotlin]
+----
+val vars = graph.variables()
+
+vars.set("description", "Modern toy graph — TinkerPop reference")
+vars.set("version", 1)
+
+val desc: String? = vars.get<String>("description")
+println(vars.keys())     // → [description, version]
+println(vars.asMap())    // → {description=..., version=1}
+
+vars.remove("version")
+----
+
+== Serialization (GraphSON)
+
+TinkerCat ships a GraphSON v3.0 reader/writer pair that follows the
+https://tinkerpop.apache.org/docs/current/dev/io/#graphson-3d0[TinkerPop GraphSON 3.0 specification].
+
+=== Writing
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONWriter
+
+val writer = GraphSONWriter()
+
+// Entire graph
+val graphJson: String = writer.writeGraph(graph)
+
+// Single vertex
+val vertexJson: String = writer.writeVertex(marko)
+
+// Single edge
+val edgeJson: String = writer.writeEdge(edge)
+
+// Arbitrary typed value
+val valueJson: String = writer.writeValue(listOf(1, 2, 3))
+----
+
+.Example GraphSON output (single vertex)
+[source,json]
+----
+{
+  "@type": "g:Vertex",
+  "@value": {
+    "id": { "@type": "g:Int32", "@value": 1 },
+    "label": "person",
+    "properties": {
+      "name": [
+        {
+          "@type": "g:VertexProperty",
+          "@value": {
+            "id": { "@type": "g:Int64", "@value": 0 },
+            "value": "marko",
+            "label": "name"
+          }
+        }
+      ],
+      "age": [
+        {
+          "@type": "g:VertexProperty",
+          "@value": {
+            "id": { "@type": "g:Int64", "@value": 1 },
+            "value": { "@type": "g:Int32", "@value": 29 },
+            "label": "age"
+          }
+        }
+      ]
+    }
+  }
+}
+----
+
+=== Reading
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONReader
+
+val reader = GraphSONReader()
+
+// Restore a full graph from JSON
+val restoredGraph: TinkerCat = reader.readGraph(graphJson)
+
+// Parse a single vertex from JSON
+val vertex: Vertex = reader.readVertex(vertexJson)
+----
+
+=== Handling ID Conflicts
+
+When reading a graph whose vertex/edge IDs collide with data already in the graph,
+supply an `IdConflictStrategy`:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.IdConflictStrategy
+
+// Skip elements whose ID already exists (default)
+val reader = GraphSONReader(conflictStrategy = IdConflictStrategy.SKIP)
+
+// Replace existing elements
+val reader = GraphSONReader(conflictStrategy = IdConflictStrategy.REPLACE)
+
+// Throw on any conflict
+val reader = GraphSONReader(conflictStrategy = IdConflictStrategy.THROW)
+----
+
+== Removing Elements
+
+[source,kotlin]
+----
+// Remove a vertex (and all its incident edges)
+vertex.remove()
+
+// Remove an edge
+edge.remove()
+
+// Remove a property
+vertex.property<String>("city").remove()
+----
+
+After removal the element object is invalid; any further access throws.
+
+== Platform Notes
+
+=== JVM
+
+The JVM platform adds concurrent read access and a persistence layer backed by
+`JvmPersistenceLayer` and `MemoryMappedStorage`.
+These are used automatically when the corresponding config keys are set.
+
+[source,kotlin]
+----
+val graph = TinkerCat.open(mapOf(
+    // No additional keys needed; JVM extensions activate automatically
+))
+
+// ConcurrentGraphOperations wraps the graph for thread-safe access
+import org.apache.tinkerpop.gremlin.tinkercat.structure.ConcurrentGraphOperations
+
+val safeGraph = ConcurrentGraphOperations(graph)
+----
+
+=== JavaScript / TypeScript
+
+The JS target exposes array-returning overloads for JavaScript/TypeScript consumers
+because iterators cannot cross the Kotlin/JS boundary cleanly:
+
+[source,kotlin]
+----
+// JavaScript-friendly array APIs
+val vertexArray: Array<Vertex> = graph.verticesArray()
+val edgeArray: Array<Edge>     = graph.edgesArray()
+
+// Query with criteria
+val results: Array<Vertex> = graph.queryVerticesArray(
+    listOf(PropertyQueryEngine.ExactCriterion("label", "person"))
+)
+----
+
+TypeScript type definitions (`.d.ts`) are generated automatically during the
+`compileKotlinJs` build task.
+
+=== Native
+
+The native target compiles to platform-specific binaries for Linux x64, macOS ARM64,
+and Windows MinGW x64 with no JVM dependency.
+The API is identical to the common module; no platform-specific imports are required.
+
+== Relationship to Apache TinkerPop
+
+TinkerCat implements a multiplatform subset of the Apache TinkerPop 3 structural API.
+
+[cols="2,2,2", options="header"]
+|===
+|Concept |TinkerPop 3 (Java) |TinkerCat (Kotlin)
+
+|Reference graph
+|`TinkerGraph`
+|`TinkerCat`
+
+|Graph factory
+|`TinkerFactory.createModern()`
+|Construct manually (see <<Sample Graphs>>)
+
+|Open graph
+|`TinkerGraph.open()`
+|`TinkerCat.open()`
+
+|Add vertex
+|`graph.addVertex(T.label, "person", "name", "alice")`
+|`graph.addVertex("label", "person", "name", "alice")`
+
+|Add edge
+|`v.addEdge("knows", u, "weight", 1.0)`
+|`v.addEdge("knows", u, "weight", 1.0)`
+
+|Traversal source
+|`graph.traversal()` → `GraphTraversalSource`
+|`graph.vertices().asSequence()` (direct iterator)
+
+|Equality filter
+|`g.V().has("name", "alice")`
+|`graph.vertices().asSequence().filter { it.value<String>("name") == "alice" }`
+
+|Property index
+|`graph.createIndex("name", Vertex::class.java)`
+|`graph.createIndex("name", Vertex::class)`
+
+|GraphSON write
+|`GraphSONWriter.build().create().writeGraph(out, graph)`
+|`GraphSONWriter().writeGraph(graph)`
+
+|GraphSON read
+|`GraphSONReader.build().create().readGraph(in, graph)`
+|`GraphSONReader().readGraph(json)`
+|===
+
+TinkerCat does not currently implement `GraphComputer` (OLAP) or Gremlin Server connectivity.
+For full Gremlin traversal language support on the JVM, use the upstream TinkerGraph with
+the `gremlin-core` dependency alongside a `GraphTraversalSource`.
+
+== See Also
+
+* xref:../tutorials/getting-started.adoc[Getting Started] — hands-on introduction
+* xref:api.adoc[API Reference] — complete method listing
+* xref:indexing.adoc[Advanced Indexing] — composite and range index deep-dive
+* xref:multi-property.adoc[Multi-Property and Meta-Property Support]
+* xref:algorithms.adoc[Graph Algorithms] — built-in BFS, Dijkstra's, SCC, and more
+* xref:../explanation/provenance.adoc[Provenance] — relationship to Apache TinkerPop source material
+* https://tinkerpop.apache.org/docs/current/reference/#tinkergraph-gremlin[TinkerGraph-Gremlin] (upstream TinkerPop reference)

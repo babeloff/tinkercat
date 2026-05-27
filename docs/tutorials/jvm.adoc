@@ -1,0 +1,322 @@
+= Getting Started on the JVM
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Introduction
+
+This tutorial walks through using TinkerCat on the JVM — the platform that offers the most tooling, the
+widest ecosystem integration, and the strongest debugging story.
+You will set up a Gradle project, build your first graph, query it, and explore JVM-specific features
+such as coroutine-friendly concurrency and persistence.
+
+No prior Kotlin experience is required, but familiarity with a JVM build tool (Gradle or Maven) is assumed.
+
+== Prerequisites
+
+[cols="1,2", options="header"]
+|===
+|Requirement |Version
+
+|JDK
+|23 or later (managed by pixi in this repo)
+
+|Gradle
+|9.x (managed by pixi in this repo)
+
+|Kotlin
+|2.3.x (configured in the build)
+|===
+
+Inside this repository, pixi manages all of these:
+
+[source,bash]
+----
+pixi install        # install the managed JDK, Kotlin compiler, and Gradle wrapper
+pixi run compile    # verify the JVM target compiles
+----
+
+== Adding TinkerCat as a Dependency
+
+=== Gradle (Kotlin DSL)
+
+[source,kotlin]
+----
+// build.gradle.kts
+dependencies {
+    implementation("org.apache.tinkerpop:tinkercat-jvm:1.0.0")
+}
+----
+
+=== Gradle (Groovy DSL)
+
+[source,groovy]
+----
+// build.gradle
+dependencies {
+    implementation 'org.apache.tinkerpop:tinkercat-jvm:1.0.0'
+}
+----
+
+=== Maven
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.apache.tinkerpop</groupId>
+    <artifactId>tinkercat-jvm</artifactId>
+    <version>1.0.0</version>
+</dependency>
+----
+
+== Creating Your First Graph
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
+import org.apache.tinkerpop.gremlin.structure.Direction
+
+fun main() {
+    // Open an in-memory graph — no configuration required
+    val graph = TinkerCat.open()
+
+    // Add vertices
+    val marko = graph.addVertex("label", "person", "name", "marko", "age", 29)
+    val vadas = graph.addVertex("label", "person", "name", "vadas", "age", 27)
+    val lop   = graph.addVertex("label", "software", "name", "lop", "lang", "java")
+
+    // Add edges
+    marko.addEdge("knows",   vadas, "weight", 0.5)
+    marko.addEdge("created", lop,   "weight", 0.4)
+
+    // Traverse
+    val friends = marko.vertices(Direction.OUT, "knows")
+        .asSequence()
+        .map { it.value<String>("name") }
+        .toList()
+
+    println("marko knows: $friends")   // → [vadas]
+    println("vertices: ${graph.vertices().asSequence().count()}")  // → 3
+
+    graph.close()
+}
+----
+
+Run it from the repository:
+
+[source,bash]
+----
+pixi run gradle runJvmDemo
+----
+
+== JVM-Specific Factory
+
+On the JVM, companion-object access can fail at runtime when modules are loaded via complex
+class-loader hierarchies (OSGi containers, application servers, fat JARs with shading).
+`TinkerCatFactory` provides a reflection-safe alternative:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.factory.TinkerCatFactory
+
+// Always works regardless of module or class-loader topology
+val graph = TinkerCatFactory.create()
+
+val graph = TinkerCatFactory.create(mapOf(
+    TinkerCat.GREMLIN_TINKERCAT_DEFAULT_VERTEX_PROPERTY_CARDINALITY to "list"
+))
+----
+
+== Concurrency
+
+TinkerCat supports concurrent reads from multiple threads without additional synchronisation.
+Writes (adding/removing vertices and edges) require external coordination.
+
+=== Concurrent Reads with Coroutines
+
+[source,kotlin]
+----
+import kotlinx.coroutines.*
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
+
+suspend fun parallelQuery(graph: TinkerCat): List<String> = coroutineScope {
+    val byAge = async(Dispatchers.Default) {
+        graph.vertices().asSequence()
+            .filter { (it.value<Int>("age") ?: 0) > 28 }
+            .map { it.value<String>("name") ?: "" }
+            .toList()
+    }
+    val byLang = async(Dispatchers.Default) {
+        graph.vertices().asSequence()
+            .filter { it.value<String>("lang") == "java" }
+            .map { it.value<String>("name") ?: "" }
+            .toList()
+    }
+    (byAge.await() + byLang.await()).distinct()
+}
+----
+
+=== Thread-Safe Writes with a Mutex
+
+[source,kotlin]
+----
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
+
+class ThreadSafeGraph {
+    val graph = TinkerCat.open()
+    private val lock = ReentrantReadWriteLock()
+
+    fun addVertex(vararg keyValues: Any?) = lock.write {
+        graph.addVertex(*keyValues)
+    }
+
+    fun queryByName(name: String) = lock.read {
+        graph.vertices().asSequence()
+            .filter { it.value<String>("name") == name }
+            .toList()
+    }
+}
+----
+
+=== Using ConcurrentGraphOperations
+
+The `ConcurrentGraphOperations` wrapper handles locking internally for common patterns:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.ConcurrentGraphOperations
+
+val safeGraph = ConcurrentGraphOperations(TinkerCat.open())
+
+// All reads and writes are synchronised through the wrapper
+val v = safeGraph.addVertex("label", "person", "name", "Alice")
+----
+
+== Persistence
+
+JVM persistence is provided by `JvmPersistenceLayer`.
+It serialises the graph to disk using GraphSON and restores it on next startup.
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.JvmPersistenceLayer
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
+import java.io.File
+
+// Save
+val graph = TinkerCat.open()
+graph.addVertex("label", "person", "name", "Alice")
+val persistence = JvmPersistenceLayer(graph)
+persistence.saveToFile(File("graph.json"))
+
+// Restore
+val restoredGraph = TinkerCat.open()
+val restorePersistence = JvmPersistenceLayer(restoredGraph)
+restorePersistence.loadFromFile(File("graph.json"))
+println(restoredGraph.vertices().asSequence().count()) // → 1
+----
+
+=== Memory-Mapped Storage
+
+`MemoryMappedStorage` uses a memory-mapped file to keep very large graphs on disk
+while accessing them with near-in-memory speed:
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.MemoryMappedStorage
+import java.io.File
+
+val storage = MemoryMappedStorage(File("graph.mmf"), capacityBytes = 512 * 1024 * 1024L)
+storage.open()
+// ... use graph backed by memory-mapped storage
+storage.flush()
+storage.close()
+----
+
+== JVM-Native Java Interoperability
+
+TinkerCat compiles to standard JVM bytecode, so it integrates directly with Java code
+and Java ecosystem libraries.
+
+=== Using TinkerCat from Java
+
+[source,java]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat;
+import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.Direction;
+
+TinkerCat graph = TinkerCat.Companion.open();
+
+Vertex alice = graph.addVertex("label", "person", "name", "Alice", "age", 30);
+Vertex bob   = graph.addVertex("label", "person", "name", "Bob",   "age", 25);
+alice.addEdge("knows", bob, "weight", 1.0);
+
+graph.vertices().forEachRemaining(v ->
+    System.out.println(v.value("name") + " age=" + v.value("age"))
+);
+----
+
+=== Serializing to and from Java Streams
+
+[source,kotlin]
+----
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONWriter
+import org.apache.tinkerpop.gremlin.tinkercat.io.graphson.GraphSONReader
+import java.io.BufferedWriter
+import java.io.FileWriter
+
+val graphJson = GraphSONWriter().writeGraph(graph)
+BufferedWriter(FileWriter("graph.graphson")).use { it.write(graphJson) }
+
+val jsonString = java.io.File("graph.graphson").readText()
+val restored = GraphSONReader().readGraph(jsonString)
+----
+
+== Performance Monitoring with JMX
+
+[source,kotlin]
+----
+import java.lang.management.ManagementFactory
+
+fun printJvmStats() {
+    val memory = ManagementFactory.getMemoryMXBean()
+    val heap = memory.heapMemoryUsage
+    println("Heap used:      ${heap.used / 1_048_576}MB")
+    println("Heap committed: ${heap.committed / 1_048_576}MB")
+    println("Heap max:       ${heap.max / 1_048_576}MB")
+}
+----
+
+For large graphs, configure the JVM heap in `gradle.properties`:
+
+[source,properties]
+----
+org.gradle.jvmargs=-Xmx4g -Xms512m -XX:+UseG1GC
+----
+
+== Running the Tests
+
+[source,bash]
+----
+pixi run test-jvm          # JVM unit tests
+pixi run gradle jvmTest    # same, via direct Gradle invocation
+----
+
+Compliance tests (upstream TinkerPop suite run against TinkerCat) are in `src/jvmCompliance`:
+
+[source,bash]
+----
+pixi run gradle jvmComplianceTest
+----
+
+== Next Steps
+
+* xref:../reference/tinkercap-gremlin.adoc[TinkerCat-Gremlin Reference] — complete API listing and traversal patterns
+* xref:../reference/indexing.adoc[Advanced Indexing] — composite and range indexes for faster queries
+* xref:../reference/algorithms.adoc[Graph Algorithms] — BFS, Dijkstra, SCC, and more
+* xref:../how-to/migrate-from-java.adoc[Migrate from Java TinkerCat] — if you're porting an existing project

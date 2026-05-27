@@ -1,0 +1,200 @@
+= Task 7.4.5: call() Service Invocation Step
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: LOW +
+*Estimated Effort*: 1–2 weeks +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x `call()` step
+
+The `call()` step invokes a named *service* registered on the `GraphTraversalSource`
+and injects the results back into the traversal pipeline.
+Services are pluggable adapters that wrap external systems (HTTP APIs, search indexes,
+vector databases, etc.) and expose them as first-class traversal steps.
+
+TinkerCat targets in-memory graph computation on all platforms, so the built-in
+service registry is intentionally minimal.
+This task implements the `call()` step mechanism and a reference `EchoService` for
+testing; production services are provided by users of the library.
+
+== Background
+
+=== TinkerPop Service Contract
+
+A service receives a context map and an optional inner traversal, and returns an
+iterator of result maps:
+
+[source,kotlin]
+----
+interface TraversalCallbackService {
+    val name: String
+    fun execute(context: Map<String, Any?>, innerTraversal: GraphTraversal<*, *>?): Iterator<Map<String, Any?>>
+}
+----
+
+`call()` overloads:
+
+[source,kotlin]
+----
+// No arguments
+g.call("myService")
+
+// With a context map
+g.call("myService", mapOf("key" to "value"))
+
+// With a context map and an inner traversal
+g.call("myService", mapOf("key" to "value"), __.V().hasLabel("person"))
+----
+
+== Implementation Plan
+
+=== 1. `TraversalCallbackService` Interface
+
+[source,kotlin]
+----
+// commonMain
+interface TraversalCallbackService {
+    val name: String
+    fun execute(
+        context: Map<String, Any?>,
+        innerTraversal: GraphTraversal<*, *>?
+    ): Iterator<Map<String, Any?>>
+}
+----
+
+=== 2. Service Registry
+
+Services are registered on `GraphTraversalSource` via `withService()`:
+
+[source,kotlin]
+----
+class GraphTraversalSource(val graph: TinkerCat) {
+    private val services = mutableMapOf<String, TraversalCallbackService>()
+
+    fun withService(service: TraversalCallbackService): GraphTraversalSource {
+        val copy = copy()
+        copy.services[service.name] = service
+        return copy
+    }
+
+    internal fun resolveService(name: String): TraversalCallbackService =
+        services[name] ?: throw IllegalArgumentException("No service registered: '$name'")
+}
+----
+
+=== 3. `CallStep`
+
+[source,kotlin]
+----
+class CallStep(
+    private val serviceName: String,
+    private val context: Map<String, Any?>,
+    private val innerTraversal: GraphTraversal<*, *>?,
+    private val source: GraphTraversalSource
+) : FlatMapStep<Any?, Map<String, Any?>>() {
+
+    private var results: Iterator<Map<String, Any?>>? = null
+
+    override fun flatMap(traverser: Traverser<Any?>): Iterator<Map<String, Any?>> {
+        val svc = source.resolveService(serviceName)
+        return svc.execute(context + ("_traverser" to traverser.get()), innerTraversal)
+    }
+}
+----
+
+=== 4. `GraphTraversalSource` and `GraphTraversal` DSL Methods
+
+[source,kotlin]
+----
+// On GraphTraversalSource (seed step — call without prior traversal context)
+fun call(service: String): GraphTraversal<Any?, Map<String, Any?>>
+fun call(service: String, context: Map<String, Any?>): GraphTraversal<Any?, Map<String, Any?>>
+fun call(
+    service: String,
+    context: Map<String, Any?>,
+    traversal: GraphTraversal<*, *>
+): GraphTraversal<Any?, Map<String, Any?>>
+
+// On GraphTraversal (mid-traversal form)
+fun <S> GraphTraversal<S, *>.call(service: String): GraphTraversal<S, Map<String, Any?>>
+fun <S> GraphTraversal<S, *>.call(
+    service: String,
+    context: Map<String, Any?>
+): GraphTraversal<S, Map<String, Any?>>
+----
+
+=== 5. Reference `EchoService`
+
+A built-in service that echoes its context map back as a single-entry result.
+Used for unit tests and as a code example:
+
+[source,kotlin]
+----
+object EchoService : TraversalCallbackService {
+    override val name = "echo"
+    override fun execute(
+        context: Map<String, Any?>,
+        innerTraversal: GraphTraversal<*, *>?
+    ): Iterator<Map<String, Any?>> = listOf(context).iterator()
+}
+----
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+    .withService(EchoService)
+
+// Seed call — no prior traversal context
+val echo = g.call("echo", mapOf("hello" to "world")).toList()
+// echo == [{"hello": "world", "_traverser": null}]
+
+// Mid-traversal call with inner traversal
+val results = g.V().hasLabel("person")
+    .call("echo", mapOf("mode" to "lookup"), __.values<String>("name"))
+    .toList()
+
+// Custom service wrapping an HTTP API (user-provided)
+class GeocodingService(private val client: HttpClient) : TraversalCallbackService {
+    override val name = "geocode"
+    override fun execute(
+        context: Map<String, Any?>,
+        innerTraversal: GraphTraversal<*, *>?
+    ): Iterator<Map<String, Any?>> {
+        val address = context["address"] as? String ?: return emptyList<Map<String, Any?>>().iterator()
+        val coords = client.geocode(address)
+        return listOf(mapOf("lat" to coords.lat, "lng" to coords.lng)).iterator()
+    }
+}
+----
+
+== Test Plan
+
+* `CallStepTest` in `commonTest`:
+  - `call("echo")` with no context returns empty map result
+  - `call("echo", context)` returns context echoed back
+  - Unknown service name throws `IllegalArgumentException`
+  - Mid-traversal `call()` receives traverser value in context under `_traverser` key
+  - Inner traversal is passed through to the service
+  - `withService()` is immutable — original source is unmodified
+  - Two services with different names coexist in the registry
+
+== Acceptance Criteria
+
+- [x] `TraversalCallbackService` interface defined in `commonMain`
+- [x] `withService()` registers a service on an immutable copy of `GraphTraversalSource`
+- [x] `call()` available as seed step on `GraphTraversalSource` and mid-traversal on `GraphTraversal`
+- [x] `EchoService` reference implementation ships in `commonMain`
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#call-step[TinkerPop 3.8.1: call() step]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]

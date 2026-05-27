@@ -1,0 +1,433 @@
+= Getting Started with Python
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Introduction
+
+This tutorial covers using TinkerCat from Python.
+The `tinkercat` Python package wraps the Kotlin/Native shared library with a high-level, idiomatic
+Python API built on top of `ctypes`.
+Because the implementation is in compiled Kotlin, no JVM is required at runtime — only the native
+shared library (`libtinkercat.so` / `.dylib` / `.dll`) and Python 3.8+.
+
+By the end of this tutorial you will have:
+
+* Installed the native library and Python package
+* Built a small graph
+* Queried it with Python-style list comprehensions
+* Handled errors correctly
+* Saved and loaded the graph
+
+== Prerequisites
+
+[cols="1,2", options="header"]
+|===
+|Requirement |Version
+
+|Python
+|3.8 or later (3.14+ recommended; managed by pixi in this repo)
+
+|pip / hatch
+|Any current version
+
+|Native shared library (`libtinkercat`)
+|Built from source (see below)
+|===
+
+The Python package has **no pip dependencies** beyond the Python standard library.
+
+== Installation
+
+=== Step 1 — Build the Native Library
+
+The Python package calls into `libtinkercat`, so you must build the Kotlin/Native target first:
+
+[source,bash]
+----
+pixi install                             # install Kotlin/Native toolchain
+pixi run gradle linkReleaseSharedNative  # build libtinkercat.so / .dylib / .dll
+----
+
+The shared library is written to:
+
+----
+build/bin/native/releaseShared/libtinkercat.so     (Linux)
+build/bin/native/releaseShared/libtinkercat.dylib  (macOS)
+build/bin/native/releaseShared/libtinkercat.dll    (Windows)
+----
+
+=== Step 2 — Install the Python Package
+
+[source,bash]
+----
+pixi run python-setup          # installs the package in development mode
+# or manually:
+cd python && pip install -e ".[dev]"
+----
+
+=== Step 3 — Verify the Installation
+
+[source,bash]
+----
+python - <<'EOF'
+from tinkercat import TinkerCat
+g = TinkerCat()
+print(f"TinkerCat ready: {g.vertex_count} vertices")
+g.close()
+EOF
+----
+
+You should see:
+
+----
+TinkerCat ready: 0 vertices
+----
+
+=== Library Search Path
+
+The Python package looks for the shared library in the following order:
+
+1. `TINKERCAT_NATIVE_LIB` environment variable (highest priority)
+2. `build/bin/native/releaseShared/` relative to the package root (development build)
+3. `build/bin/native/debugShared/`
+4. Alongside the Python package files
+5. The active conda / virtualenv prefix (`$PREFIX/lib/`)
+6. System-wide paths (`/usr/local/lib`, `/usr/lib`)
+
+If the library is not found at any of these locations, a `TinkerCatLibraryError` is raised with the full
+list of paths that were checked.
+
+== Creating Your First Graph
+
+[source,python]
+----
+from tinkercat import TinkerCat
+
+graph = TinkerCat()
+
+# Add vertices
+marko  = graph.add_vertex("person",   name="marko",  age=29)
+vadas  = graph.add_vertex("person",   name="vadas",  age=27)
+josh   = graph.add_vertex("person",   name="josh",   age=32)
+lop    = graph.add_vertex("software", name="lop",    lang="java")
+ripple = graph.add_vertex("software", name="ripple", lang="java")
+peter  = graph.add_vertex("person",   name="peter",  age=35)
+
+# Add edges
+graph.add_edge("knows",   marko, vadas,  weight=0.5)
+graph.add_edge("knows",   marko, josh,   weight=1.0)
+graph.add_edge("created", marko, lop,    weight=0.4)
+graph.add_edge("created", josh,  ripple, weight=1.0)
+graph.add_edge("created", josh,  lop,    weight=0.4)
+graph.add_edge("created", peter, lop,    weight=0.2)
+
+print(f"Vertices: {graph.vertex_count}")  # → 6
+print(f"Edges:    {graph.edge_count}")    # → 6
+
+graph.close()
+----
+
+=== Using a Context Manager
+
+Always prefer the context manager form — it guarantees resource cleanup even if an exception is raised:
+
+[source,python]
+----
+from tinkercat import TinkerCat
+
+with TinkerCat() as graph:
+    alice = graph.add_vertex("person", name="Alice", age=30)
+    bob   = graph.add_vertex("person", name="Bob",   age=25)
+    graph.add_edge("knows", alice, bob, since=2020)
+
+    print(graph)   # → TinkerCat(vertices=2, edges=1)
+# graph is automatically closed here
+----
+
+== Vertices
+
+=== Creating Vertices
+
+[source,python]
+----
+# Label only
+v = graph.add_vertex("person")
+
+# With keyword properties
+v = graph.add_vertex("person", name="Alice", age=30, city="Nashville")
+
+# With an explicit ID
+v = graph.add_vertex("person", vertex_id="alice-1", name="Alice")
+----
+
+=== Reading Properties
+
+[source,python]
+----
+name = v.get_property("name")              # → "Alice"
+age  = v.get_property("age")               # → 30
+city = v.get_property("city", "Unknown")   # → "Unknown" if not set
+----
+
+=== Setting and Removing Properties
+
+[source,python]
+----
+v.set_property("score", 0.95)
+old_score = v.remove_property("score")    # returns removed value
+----
+
+=== Checking Properties
+
+[source,python]
+----
+print("age" in v.properties)   # True
+print(v.properties.keys())     # dict_keys(['name', 'age', 'city'])
+----
+
+== Edges
+
+[source,python]
+----
+# Create an edge
+e = graph.add_edge("knows", alice, bob, weight=1.0, since=2019)
+
+# Access edge attributes
+print(e.label)           # → "knows"
+print(e.out_vertex.id)   # → alice's ID
+print(e.in_vertex.id)    # → bob's ID
+print(e.get_property("weight"))   # → 1.0
+
+# Navigate to the other vertex
+other = e.other_vertex(alice)     # → bob
+----
+
+== Traversal
+
+The Python API uses plain Python lists and list comprehensions for graph traversal.
+
+[source,python]
+----
+with TinkerCat() as graph:
+    marko = graph.add_vertex("person", name="marko", age=29)
+    vadas = graph.add_vertex("person", name="vadas", age=27)
+    josh  = graph.add_vertex("person", name="josh",  age=32)
+    lop   = graph.add_vertex("software", name="lop")
+
+    graph.add_edge("knows",   marko, vadas, weight=0.5)
+    graph.add_edge("knows",   marko, josh,  weight=1.0)
+    graph.add_edge("created", marko, lop,   weight=0.4)
+
+    # Outgoing edges
+    out_edges = marko.out_edges()              # all outgoing edges
+    knows_edges = marko.out_edges("knows")     # filtered by label
+
+    # One-hop neighbour traversal
+    friends = marko.out_vertices("knows")      # → [vadas, josh]
+
+    # Incoming edges
+    creators = lop.in_vertices("created")      # → [marko]
+
+    # Both directions
+    all_neighbours = josh.both_vertices()
+
+    # Names of marko's friends
+    names = [f.get_property("name") for f in marko.out_vertices("knows")]
+    print(names)   # → ['vadas', 'josh']
+
+    # Two-hop: friends-of-friends
+    fof = [
+        fof_v.get_property("name")
+        for friend in marko.out_vertices("knows")
+        for fof_v in friend.out_vertices("knows")
+    ]
+    print(list(set(fof)))
+----
+
+=== Filtering Vertices
+
+[source,python]
+----
+# All vertices
+all_v = graph.vertices()
+
+# Filter by a property using Python's built-in filter
+people = graph.vertices(label="person")  # exact-match filter
+
+# Custom filter with a comprehension
+seniors = [v for v in graph.vertices() if v.get_property("age", 0) >= 30]
+
+# Edges with a specific property value
+heavy = [e for e in graph.edges() if e.get_property("weight", 0.0) >= 1.0]
+----
+
+== Error Handling
+
+The Python package provides a hierarchy of typed exceptions.
+Always catch the most specific exception you can handle and let others propagate.
+
+[source,python]
+----
+from tinkercat.exceptions import (
+    TinkerCatError,            # base class for all TinkerCat errors
+    TinkerCatLibraryError,     # native library not found or failed to load
+    TinkerCatNativeError,      # error returned by the native library
+    TinkerCatVertexError,      # vertex operation failed
+    TinkerCatEdgeError,        # edge operation failed
+    TinkerCatValidationError,  # invalid argument passed to the API
+    TinkerCatMemoryError,      # native memory allocation failure
+)
+
+# Catch library loading errors at startup
+try:
+    graph = TinkerCat()
+except TinkerCatLibraryError as e:
+    print(f"Could not load native library: {e}")
+    print("Set TINKERCAT_NATIVE_LIB=/path/to/libtinkercat.so and retry.")
+    raise SystemExit(1)
+
+# Validate input before passing to the API
+try:
+    v = graph.add_vertex(label=42)          # label must be str
+except TinkerCatValidationError as e:
+    print(f"Bad argument: {e}")
+
+# Handle edge creation failures
+try:
+    e = graph.add_edge("knows", alice, foreign_vertex)  # wrong graph
+except TinkerCatValidationError as e:
+    print(f"Vertices must belong to the same graph: {e}")
+----
+
+== Removing Elements
+
+[source,python]
+----
+# Remove a vertex (automatically removes its incident edges)
+graph.remove_vertex(alice)
+
+# Remove an edge
+graph.remove_edge(edge)
+
+# Remove all vertices and edges
+graph.clear()
+----
+
+== Serialization and Persistence
+
+The Python package does not yet expose the GraphSON reader/writer directly.
+To persist a graph, serialise it on the Kotlin side (JVM or Native) and exchange the JSON string,
+or use a lightweight approach in Python:
+
+[source,python]
+----
+import json
+
+def export_graph(graph: TinkerCat) -> dict:
+    """Export graph to a plain Python dict."""
+    return {
+        "vertices": [
+            {"id": v.id, "label": v.label, **v.properties}
+            for v in graph.vertices()
+        ],
+        "edges": [
+            {
+                "id": e.id,
+                "label": e.label,
+                "out": e.out_vertex.id,
+                "in":  e.in_vertex.id,
+                **e.properties
+            }
+            for e in graph.edges()
+        ],
+    }
+
+def import_graph(data: dict) -> TinkerCat:
+    """Restore a graph exported with export_graph()."""
+    graph = TinkerCat()
+    vertex_map = {}
+    for vd in data["vertices"]:
+        vid = vd.pop("id")
+        label = vd.pop("label", "vertex")
+        v = graph.add_vertex(label, vertex_id=vid, **vd)
+        vertex_map[vid] = v
+    for ed in data["edges"]:
+        out_v = vertex_map[ed["out"]]
+        in_v  = vertex_map[ed["in"]]
+        props = {k: v for k, v in ed.items() if k not in ("id", "label", "out", "in")}
+        graph.add_edge(ed["label"], out_v, in_v, edge_id=ed["id"], **props)
+    return graph
+
+# Usage
+data = export_graph(graph)
+with open("graph.json", "w") as fh:
+    json.dump(data, fh, indent=2)
+
+with open("graph.json") as fh:
+    restored = import_graph(json.load(fh))
+print(restored.vertex_count)
+----
+
+== Running the Tests
+
+[source,bash]
+----
+pixi run python-test                           # full test suite
+cd python && python -m pytest tests/ -v        # verbose output
+cd python && python -m pytest tests/ --cov=tinkercat  # with coverage
+----
+
+Run a single test file:
+
+[source,bash]
+----
+cd python && python -m pytest tests/test_graph.py -v
+----
+
+== Configuring the Library Path
+
+If the library is in a non-standard location, set the environment variable before starting Python:
+
+[source,bash]
+----
+export TINKERCAT_NATIVE_LIB=/opt/tinkercat/lib/libtinkercat.so
+python my_script.py
+----
+
+Or set it programmatically before the first import:
+
+[source,python]
+----
+import os
+os.environ["TINKERCAT_NATIVE_LIB"] = "/opt/tinkercat/lib/libtinkercat.so"
+
+from tinkercat import TinkerCat   # library is loaded on first import
+----
+
+== Current Limitations
+
+[cols="1,2", options="header"]
+|===
+|Feature |Status
+
+|Vertex / edge deletion
+|Not yet propagated to the native layer (local Python state is removed)
+
+|Advanced graph algorithms
+|Available in Kotlin; not yet exposed through the Python API
+
+|Multi-property / meta-property support
+|Planned; use the JVM or native Kotlin API for these features today
+
+|Thread safety
+|Not fully validated; avoid sharing `TinkerCat` instances across threads
+|===
+
+== Next Steps
+
+* xref:../tutorials/native.adoc[Native Tutorial] — build the shared library and understand the C ABI
+* xref:../reference/tinkercat-gremlin.adoc[TinkerCat-Gremlin Reference] — understand the underlying graph model
+* xref:../reference/algorithms.adoc[Graph Algorithms] — available in Kotlin, roadmapped for Python

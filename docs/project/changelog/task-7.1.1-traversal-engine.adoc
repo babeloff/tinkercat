@@ -1,0 +1,280 @@
+= Task 7.1.1: Gremlin Traversal Engine Integration
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: HIGH — critical path for all step-level parity work in Phase 7 +
+*Estimated Effort*: 8–12 weeks +
+*Dependencies*: None +
+*Upstream Reference*: TinkerPop 3.8.x `GraphTraversalSource`, `GraphTraversal`
+
+TinkerCat was based on TinkerGraph 3.7.x and currently exposes only the structural
+graph API (`vertices()`, `edges()`, adjacency-list traversal).
+TinkerGraph 3.8.x provides a full Gremlin traversal engine via `graph.traversal()`
+returning a `GraphTraversalSource`.
+This task implements that engine for TinkerCat in idiomatic Kotlin Multiplatform.
+
+All other Phase 7 traversal-step tasks (7.4.1–7.4.6, 7.5.1–7.5.2, 7.7.1) are blocked
+on this task.
+
+== Background
+
+The current query path in TinkerCat is:
+
+----
+graph.vertices().asSequence().filter { ... }   // direct iterator
+graph.propertyQueryEngine().queryVertices(...)  // PropertyQueryEngine
+----
+
+TinkerPop 3.8.x provides a richer, composable query path:
+
+[source,kotlin]
+----
+val g = graph.traversal()
+g.V().hasLabel("person").has("age", P.gte(30)).values("name").toList()
+----
+
+The traversal engine decouples query composition from execution, enabling
+traversal strategies (index push-down, count short-circuit, etc.) to optimise
+the plan before any data is read.
+
+== Implementation Plan
+
+=== Phase 1: Core Interfaces (Weeks 1–3)
+
+==== `GraphTraversalSource`
+
+[source,kotlin]
+----
+// commonMain
+class GraphTraversalSource(val graph: TinkerCat) {
+    fun V(vararg ids: Any?): GraphTraversal<Vertex, Vertex>
+    fun E(vararg ids: Any?): GraphTraversal<Edge, Edge>
+    fun addV(label: String = Vertex.DEFAULT_LABEL): GraphTraversal<Vertex, Vertex>
+    fun addE(label: String): GraphTraversal<Edge, Edge>
+    fun inject(vararg starts: Any?): GraphTraversal<Any?, Any?>
+    fun withStrategies(vararg strategies: TraversalStrategy): GraphTraversalSource
+    fun withoutStrategies(vararg strategies: KClass<out TraversalStrategy>): GraphTraversalSource
+}
+----
+
+Wire `TinkerCat.traversal()` to return a `GraphTraversalSource`.
+
+==== `GraphTraversal<S, E>`
+
+A lazy, composable pipeline.
+Each step appends a new step object; nothing executes until a terminal step is called.
+
+[source,kotlin]
+----
+interface GraphTraversal<S, E> : Iterator<E> {
+    // Filter steps
+    fun hasLabel(vararg labels: String): GraphTraversal<S, E>
+    fun has(key: String): GraphTraversal<S, E>
+    fun has(key: String, value: Any?): GraphTraversal<S, E>
+    fun has(key: String, predicate: P<*>): GraphTraversal<S, E>
+    fun hasId(vararg ids: Any?): GraphTraversal<S, E>
+    fun hasNot(key: String): GraphTraversal<S, E>
+    fun not(traversal: GraphTraversal<*, *>): GraphTraversal<S, E>
+    fun where(predicate: P<String>): GraphTraversal<S, E>
+    fun dedup(vararg dedupLabels: String): GraphTraversal<S, E>
+    fun filter(predicate: P<E>): GraphTraversal<S, E>
+
+    // Traversal steps
+    fun out(vararg edgeLabels: String): GraphTraversal<S, Vertex>
+    fun `in`(vararg edgeLabels: String): GraphTraversal<S, Vertex>
+    fun both(vararg edgeLabels: String): GraphTraversal<S, Vertex>
+    fun outE(vararg edgeLabels: String): GraphTraversal<S, Edge>
+    fun inE(vararg edgeLabels: String): GraphTraversal<S, Edge>
+    fun bothE(vararg edgeLabels: String): GraphTraversal<S, Edge>
+    fun outV(): GraphTraversal<S, Vertex>
+    fun inV(): GraphTraversal<S, Vertex>
+    fun otherV(): GraphTraversal<S, Vertex>
+
+    // Projection steps
+    fun values(vararg propertyKeys: String): GraphTraversal<S, Any?>
+    fun valueMap(vararg propertyKeys: String): GraphTraversal<S, Map<Any, Any?>>
+    fun elementMap(vararg propertyKeys: String): GraphTraversal<S, Map<Any, Any?>>
+    fun properties(vararg propertyKeys: String): GraphTraversal<S, out Property<*>>
+    fun id(): GraphTraversal<S, Any?>
+    fun label(): GraphTraversal<S, String>
+    fun key(): GraphTraversal<S, String>
+    fun value(): GraphTraversal<S, Any?>
+
+    // Ordering / limiting
+    fun order(): GraphTraversal<S, E>
+    fun by(key: String): GraphTraversal<S, E>
+    fun by(key: String, order: Order): GraphTraversal<S, E>
+    fun limit(limit: Long): GraphTraversal<S, E>
+    fun range(low: Long, high: Long): GraphTraversal<S, E>
+    fun tail(limit: Long = 1): GraphTraversal<S, E>
+    fun skip(skip: Long): GraphTraversal<S, E>
+
+    // Side-effect steps
+    fun `as`(vararg stepLabels: String): GraphTraversal<S, E>
+    fun select(vararg selectKeys: String): GraphTraversal<S, Any?>
+    fun path(): GraphTraversal<S, Path>
+    fun sideEffect(consumer: (Traverser<E>) -> Unit): GraphTraversal<S, E>
+    fun store(sideEffectKey: String): GraphTraversal<S, E>
+    fun aggregate(sideEffectKey: String): GraphTraversal<S, E>
+    fun group(): GraphTraversal<S, Map<Any?, Any?>>
+    fun groupCount(): GraphTraversal<S, Map<Any?, Long>>
+
+    // Mutation steps
+    fun addV(label: String): GraphTraversal<S, Vertex>
+    fun addE(label: String): GraphTraversal<S, Edge>
+    fun property(key: String, value: Any?): GraphTraversal<S, E>
+    fun drop(): GraphTraversal<S, E>
+
+    // Terminal steps
+    fun toList(): List<E>
+    fun toSet(): Set<E>
+    fun next(): E
+    fun next(amount: Int): List<E>
+    fun tryNext(): E?
+    fun hasNext(): Boolean
+    fun iterate(): GraphTraversal<S, E>
+    fun count(): GraphTraversal<S, Long>
+    fun sum(): GraphTraversal<S, Number>
+    fun min(): GraphTraversal<S, E>
+    fun max(): GraphTraversal<S, E>
+    fun mean(): GraphTraversal<S, Double>
+    fun fold(): GraphTraversal<S, List<E>>
+    fun unfold(): GraphTraversal<S, Any?>
+    fun explain(): TraversalExplanation
+}
+----
+
+=== Phase 2: Execution Engine (Weeks 3–6)
+
+The traversal is a linked list of `Step` objects.
+Terminal steps pull items through the pipeline lazily.
+
+[source,kotlin]
+----
+interface Step<S, E> {
+    fun processNextStart(): Traverser<E>
+    fun addStart(start: Traverser<S>)
+    val labels: Set<String>
+}
+----
+
+Key step implementations:
+
+[cols="2,3", options="header"]
+|===
+|Step class |Description
+
+|`GraphStep<E>`
+|Seed step; reads from `TinkerCat.vertices()` or `.edges()` and applies ID filters
+
+|`HasStep<E>`
+|Applies `has()` predicates; cooperates with `TinkerCatStepStrategy` for index push-down
+
+|`VertexStep`
+|Traverses adjacency lists using `TinkerVertex.edges()` / `.vertices()`
+
+|`PropertiesStep`
+|Emits `Property` or `VertexProperty` objects from the current element
+
+|`ValuesStep`
+|Emits raw property values (shorthand for `properties().value()`)
+
+|`OrderGlobalStep`
+|Buffers and sorts a complete traversal result set
+
+|`RangeGlobalStep`
+|Limits and offsets without buffering more elements than needed
+
+|`DedupGlobalStep`
+|Tracks seen objects in a `LinkedHashSet` and filters duplicates
+
+|`CountGlobalStep`
+|Counts elements without materialising the full list
+
+|`FoldStep`
+|Collects all traversers into a `List`
+
+|`SelectStep`
+|Retrieves labelled objects from the traverser path
+|===
+
+=== Phase 3: Strategy Framework (Weeks 6–8)
+
+[source,kotlin]
+----
+interface TraversalStrategy {
+    fun apply(traversal: GraphTraversal<*, *>)
+}
+----
+
+Register strategies in priority order on `GraphTraversalSource`.
+Strategies rewrite the step list before execution.
+
+Initial strategies to implement (full detail in tasks 7.5.1 and 7.5.2):
+
+- `TinkerCatStepStrategy` — push `has()` predicates into `GraphStep` for index utilisation
+- `TinkerCatCountStrategy` — replace `count()` on bare `V()` / `E()` with map-size reads
+
+=== Phase 4: `P` Predicate Integration (Week 7)
+
+[source,kotlin]
+----
+object P {
+    fun <V> eq(value: V): P<V>
+    fun <V> neq(value: V): P<V>
+    fun <V : Comparable<V>> lt(value: V): P<V>
+    fun <V : Comparable<V>> lte(value: V): P<V>
+    fun <V : Comparable<V>> gt(value: V): P<V>
+    fun <V : Comparable<V>> gte(value: V): P<V>
+    fun <V> within(vararg values: V): P<V>
+    fun <V> without(vararg values: V): P<V>
+    fun <V : Comparable<V>> between(start: V, end: V): P<V>
+    fun <V : Comparable<V>> inside(start: V, end: V): P<V>
+    fun <V : Comparable<V>> outside(start: V, end: V): P<V>
+    fun <V> test(biPredicate: BiPredicate<V, V>, value: V): P<V>
+    fun <V> not(predicate: P<V>): P<V>
+    fun <V> and(first: P<V>, second: P<V>): P<V>
+    fun <V> or(first: P<V>, second: P<V>): P<V>
+}
+----
+
+=== Phase 5: Testing (Weeks 8–12)
+
+==== Unit Tests
+
+- `GraphTraversalSourceTest` — `V()`, `E()`, configuration, strategy wiring
+- `HasStepTest` — all `has()` overloads, null handling, index co-operation
+- `VertexStepTest` — direction and label filtering
+- `OrderGlobalStepTest` — ascending, descending, shuffle, multi-key `by()`
+- `RangeGlobalStepTest` — `limit()`, `range()`, `tail()`, `skip()`
+- `SelectStepTest` — single and multi-label select with `by()` modulator
+- `CountGlobalStepTest` — empty, non-empty, filtered counts
+
+==== Integration Tests
+
+- Modern-graph traversal suite mirroring TinkerPop documentation examples
+- Property-based tests verifying traversal result sets match direct-iterator results
+- Cross-platform consistency: same traversal on JVM, JS, Native produces identical output
+
+== Acceptance Criteria
+
+- [x] `TinkerCat.traversal()` returns a `GraphTraversalSource`
+- [x] All steps listed in Phase 1 are implemented
+- [x] Traversals are lazy (no data read until terminal step called)
+- [x] `TinkerCatStepStrategy` reduces vertex scans by ≥50% on indexed graphs (benchmarked)
+- [x] All steps produce results identical to equivalent direct-iterator expressions
+- [x] 100% test success rate on JVM, JS, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#traversal[TinkerPop 3.8.1 Traversal Reference]
+* https://tinkerpop.apache.org/docs/3.8.1/dev/provider/#_graph_traversal_source[Provider Documentation: GraphTraversalSource]
+* https://github.com/apache/tinkerpop/blob/3.8.1/gremlin-core/src/main/java/org/apache/tinkerpop/gremlin/process/traversal/dsl/graph/GraphTraversalSource.java[GraphTraversalSource.java (upstream)]
+* xref:task-7.5.1-step-strategy.adoc[Task 7.5.1: TinkerCatStepStrategy]
+* xref:task-7.5.2-count-strategy.adoc[Task 7.5.2: TinkerCatCountStrategy]

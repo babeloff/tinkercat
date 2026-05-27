@@ -1,0 +1,231 @@
+= Task 7.3.1: Temporal Property Value Support
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 2–3 weeks +
+*Dependencies*: None (structure API change, no traversal engine required) +
+*Upstream Reference*: TinkerPop 3.8.x temporal type additions
+
+TinkerGraph 3.8.x added first-class support for date and time types as property
+values.
+TinkerCat currently has no specialised handling for temporal types — they are stored as
+opaque objects and serialised as strings, which loses precision and breaks
+round-trip fidelity.
+This task adds typed temporal support with correct GraphSON v3 serialisation
+on all three platforms.
+
+== New Property Value Types
+
+[cols="2,1,1,2", options="header"]
+|===
+|TinkerPop type |GraphSON token |Common source |Notes
+
+|`java.util.Date`
+|`g:Date`
+|Legacy Java code
+|Milliseconds since Unix epoch (UTC)
+
+|`java.time.Instant`
+|`g:Instant`
+|Modern Java / Kotlin
+|ISO-8601 UTC timestamp (nanosecond precision)
+
+|`java.time.LocalDate`
+|`g:LocalDate`
+|Date-only values
+|`YYYY-MM-DD`
+
+|`java.time.LocalDateTime`
+|`g:LocalDateTime`
+|Date + time, no zone
+|`YYYY-MM-DDTHH:mm:ss`
+
+|`java.time.OffsetDateTime`
+|`g:OffsetDateTime`
+|Date + time + offset
+|Full ISO-8601 with UTC offset
+
+|`java.time.Duration`
+|`g:Duration`
+|Time spans
+|ISO-8601 duration string e.g. `PT1H30M`
+|===
+
+== Implementation Plan
+
+=== 1. Multiplatform Type Mapping
+
+Use `kotlinx-datetime` as the shared temporal library in `commonMain`.
+Platform-specific `expect/actual` declarations map to native types.
+
+[source,kotlin]
+----
+// commonMain
+expect class TinkerInstant
+expect class TinkerLocalDate
+expect class TinkerLocalDateTime
+expect class TinkerOffsetDateTime
+expect class TinkerDuration
+----
+
+[source,kotlin]
+----
+// jvmMain — delegates to java.time.*
+actual typealias TinkerInstant        = java.time.Instant
+actual typealias TinkerLocalDate      = java.time.LocalDate
+actual typealias TinkerLocalDateTime  = java.time.LocalDateTime
+actual typealias TinkerOffsetDateTime = java.time.OffsetDateTime
+actual typealias TinkerDuration       = java.time.Duration
+----
+
+[source,kotlin]
+----
+// jsMain / nativeMain — delegates to kotlinx-datetime
+actual typealias TinkerInstant        = kotlinx.datetime.Instant
+actual typealias TinkerLocalDate      = kotlinx.datetime.LocalDate
+actual typealias TinkerLocalDateTime  = kotlinx.datetime.LocalDateTime
+actual typealias TinkerOffsetDateTime = kotlinx.datetime.OffsetDateTime   // see note
+actual class TinkerDuration(val isoDuration: String)  // kotlinx-datetime pending
+----
+
+NOTE: `kotlinx-datetime` does not yet expose `OffsetDateTime`; use an ISO-8601 string
+wrapper until the library adds support.
+
+=== 2. GraphSON Writer Extensions
+
+Extend `GraphSONWriter.writeTypedValue()`:
+
+[source,kotlin]
+----
+is java.util.Date ->
+    buildJsonObject {
+        put("@type", "g:Date")
+        put("@value", value.time)    // Long milliseconds
+    }
+
+is TinkerInstant ->
+    buildJsonObject {
+        put("@type", "g:Instant")
+        put("@value", value.toString())   // ISO-8601
+    }
+
+is TinkerLocalDate ->
+    buildJsonObject {
+        put("@type", "g:LocalDate")
+        put("@value", value.toString())   // YYYY-MM-DD
+    }
+
+is TinkerLocalDateTime ->
+    buildJsonObject {
+        put("@type", "g:LocalDateTime")
+        put("@value", value.toString())   // YYYY-MM-DDTHH:mm:ss
+    }
+
+is TinkerOffsetDateTime ->
+    buildJsonObject {
+        put("@type", "g:OffsetDateTime")
+        put("@value", value.toString())
+    }
+
+is TinkerDuration ->
+    buildJsonObject {
+        put("@type", "g:Duration")
+        put("@value", value.toString())   // ISO-8601 duration
+    }
+----
+
+=== 3. GraphSON Reader Extensions
+
+Extend `GraphSONReader.parseTypedValue()`:
+
+[source,kotlin]
+----
+"g:Date"           -> java.util.Date(value.jsonPrimitive.long)
+"g:Instant"        -> TinkerInstant.parse(value.jsonPrimitive.content)
+"g:LocalDate"      -> TinkerLocalDate.parse(value.jsonPrimitive.content)
+"g:LocalDateTime"  -> TinkerLocalDateTime.parse(value.jsonPrimitive.content)
+"g:OffsetDateTime" -> TinkerOffsetDateTime.parse(value.jsonPrimitive.content)
+"g:Duration"       -> parseDuration(value.jsonPrimitive.content)
+----
+
+=== 4. Range Index Support
+
+`RangeIndex` is already generic over `Comparable`.
+Verify that `TinkerInstant`, `TinkerLocalDate`, `TinkerLocalDateTime`, and
+`TinkerOffsetDateTime` all implement `Comparable`, then confirm existing
+`createRangeIndex()` handles them without changes.
+
+Add explicit tests:
+
+[source,kotlin]
+----
+graph.createRangeIndex("createdAt", Vertex::class)
+
+val now = TinkerInstant.now()
+val yesterday = now.minus(1.days)
+
+val recentVertices = graph.propertyQueryEngine().queryVertices(
+    PropertyQueryEngine.RangeCriterion("createdAt", yesterday, now, true, true)
+)
+----
+
+=== 5. `PropertyQueryEngine` Updates
+
+Ensure `RangeCriterion.minValue` and `maxValue` accept `Comparable` supertypes,
+not just `Number`, so temporal predicates can be passed:
+
+[source,kotlin]
+----
+data class RangeCriterion(
+    val key: String,
+    val minValue: Comparable<*>?,   // was: Number?
+    val maxValue: Comparable<*>?,
+    val minInclusive: Boolean,
+    val maxInclusive: Boolean
+) : PropertyCriterion
+----
+
+=== 6. Build Configuration
+
+Add `kotlinx-datetime` to `build.gradle.kts`:
+
+[source,kotlin]
+----
+commonMain.dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+}
+----
+
+== Test Plan
+
+* `TemporalPropertyTest` in `commonTest`:
+  - Store and retrieve each temporal type as a vertex property
+  - GraphSON round-trip for each type on all platforms
+  - Range query on `TinkerInstant` properties returns correct results
+  - Range query on `TinkerLocalDate` respects calendar ordering
+  - Null temporal value handled when `allowNullPropertyValues = true`
+
+* Platform-specific:
+  - JVM: interop with `java.time.*` directly
+  - JS/Native: interop with `kotlinx-datetime` types
+
+== Acceptance Criteria
+
+- [x] All six temporal types serialise to their canonical GraphSON v3 tokens
+- [x] GraphSON round-trip preserves full precision for each type
+- [x] `RangeIndex` works with any `Comparable` temporal type
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/dev/io/#_datetime[TinkerPop 3.8.1 I/O — Date/Time Types]
+* https://github.com/Kotlin/kotlinx-datetime[kotlinx-datetime library]
+* xref:task-3.6.2-graphson-parser.adoc[Task 3.6.2: GraphSON Parser]
+* xref:task-7.4.3-datetime-steps.adoc[Task 7.4.3: Date/Time Traversal Steps]

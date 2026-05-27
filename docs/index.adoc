@@ -15,6 +15,10 @@ New to TinkerCat?
 Tutorials take you step-by-step through a complete task so you build real understanding as you work.
 
 * xref:tutorials/getting-started.adoc[Getting Started] — install TinkerCat, build your first graph, and run a traversal.
+* xref:tutorials/jvm.adoc[JVM Tutorial] — Gradle setup, concurrency, persistence, and Java interoperability.
+* xref:tutorials/npm.adoc[npm / JavaScript Tutorial] — TypeScript types, the JS façade API, browser storage, and Node.js usage.
+* xref:tutorials/native.adoc[Native Tutorial] — compile to a standalone binary or shared library, C FFI, and platform optimisations.
+* xref:tutorials/python.adoc[Python Tutorial] — install the Python bindings, use the Pythonic API, and call the native shared library.
 
 == How-to guides — solving a specific problem
 
@@ -28,6 +32,7 @@ How-to guides focus on the goal, not the background.
 Precise, complete descriptions of the API and built-in features.
 Consult these when you need to know exactly what a method does or what options are available.
 
+* xref:reference/tinkercat-gremlin.adoc[TinkerCat-Gremlin] — TinkerCat as a TinkerPop reference graph: opening a graph, toy graphs, traversal patterns, indexing, and GraphSON I/O.
 * xref:reference/api.adoc[API Reference] — all graph, vertex, edge, and property operations across all platforms.
 * xref:reference/algorithms.adoc[Graph Algorithms] — shortest path, topological sort, strongly connected components, and more.
 * xref:reference/indexing.adoc[Advanced Property Indexing] — composite indices, range queries, and query planning.

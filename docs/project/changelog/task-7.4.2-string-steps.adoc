@@ -1,0 +1,243 @@
+= Task 7.4.2: String Manipulation Traversal Steps
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: MEDIUM +
+*Estimated Effort*: 1–2 weeks +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x string step additions
+
+TinkerPop 3.8.x added a suite of string-manipulation traversal steps that operate
+directly on string property values within a traversal pipeline.
+These steps eliminate the need for Groovy/Kotlin lambdas for common string
+transformations, which is important for Gremlin Language Variant (GLV) compatibility
+since lambdas cannot be transmitted to a Gremlin Server.
+
+== Steps to Implement
+
+[cols="2,4,2", options="header"]
+|===
+|Step |Behaviour |Kotlin equivalent
+
+|`concat(string, …)`
+|Concatenate the traversal value with one or more literal strings or sub-traversal results
+|`str + other`
+
+|`format(template)`
+|Fill a `printf`-style template; `%s` is replaced by the current traversal value
+|`template.format(str)`
+
+|`toLower()`
+|Convert string to lower case
+|`str.lowercase()`
+
+|`toUpper()`
+|Convert string to upper case
+|`str.uppercase()`
+
+|`trim()`
+|Remove leading and trailing whitespace
+|`str.trim()`
+
+|`ltrim()`
+|Remove leading whitespace only
+|`str.trimStart()`
+
+|`rtrim()`
+|Remove trailing whitespace only
+|`str.trimEnd()`
+
+|`replace(pattern, replacement)`
+|Replace first / all occurrences of a literal string
+|`str.replace(pattern, replacement)`
+
+|`split(delimiter)`
+|Split a string into a `List<String>`; result type changes to `List`
+|`str.split(delimiter)`
+
+|`length()`
+|Return the length of the string as a `Long`
+|`str.length.toLong()`
+
+|`substring(startIndex)` / `substring(startIndex, endIndex)`
+|Return a sub-string (0-based, exclusive end)
+|`str.substring(start, end)`
+
+|`reverse()`
+|Reverse the characters of the string
+|`str.reversed()`
+|===
+
+== Implementation Plan
+
+=== 1. Step Classes in `commonMain`
+
+Each step is a map step (`MapStep<String, R>`) because it transforms one value to another.
+
+[source,kotlin]
+----
+class ConcatStep(private val others: List<Any>) : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>): String =
+        traverser.get() + others.joinToString("") { it.toString() }
+}
+
+class ToLowerStep : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) = traverser.get().lowercase()
+}
+
+class ToUpperStep : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) = traverser.get().uppercase()
+}
+
+class TrimStep(private val side: TrimSide = TrimSide.BOTH) : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) = when (side) {
+        TrimSide.BOTH  -> traverser.get().trim()
+        TrimSide.LEFT  -> traverser.get().trimStart()
+        TrimSide.RIGHT -> traverser.get().trimEnd()
+    }
+}
+
+enum class TrimSide { BOTH, LEFT, RIGHT }
+
+class ReplaceStep(private val pattern: String, private val replacement: String)
+    : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) =
+        traverser.get().replace(pattern, replacement)
+}
+
+class SplitStep(private val delimiter: String) : MapStep<String, List<String>>() {
+    override fun map(traverser: Traverser<String>): List<String> =
+        traverser.get().split(delimiter)
+}
+
+class StringLengthStep : MapStep<String, Long>() {
+    override fun map(traverser: Traverser<String>) = traverser.get().length.toLong()
+}
+
+class SubstringStep(private val start: Int, private val end: Int? = null)
+    : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>): String {
+        val s = traverser.get()
+        return if (end != null) s.substring(start, minOf(end, s.length))
+               else s.substring(start)
+    }
+}
+
+class FormatStep(private val template: String) : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) = template.format(traverser.get())
+}
+
+class ReverseStringStep : MapStep<String, String>() {
+    override fun map(traverser: Traverser<String>) = traverser.get().reversed()
+}
+----
+
+=== 2. `GraphTraversal` DSL Methods
+
+Add to `GraphTraversal<S, String>` (or use extension functions on `GraphTraversal<S, E>` where `E: String`):
+
+[source,kotlin]
+----
+fun GraphTraversal<*, String>.concat(vararg values: Any): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.format(template: String): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.toLower(): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.toUpper(): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.trim(): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.ltrim(): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.rtrim(): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.replace(pattern: String, replacement: String): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.split(delimiter: String): GraphTraversal<*, List<String>>
+fun GraphTraversal<*, String>.length(): GraphTraversal<*, Long>
+fun GraphTraversal<*, String>.substring(start: Int): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.substring(start: Int, end: Int): GraphTraversal<*, String>
+fun GraphTraversal<*, String>.reverse(): GraphTraversal<*, String>
+----
+
+=== 3. `format()` with Multiple Arguments
+
+The `format()` step in TinkerPop 3.8.x can format multiple named tokens using `%{key}` syntax:
+
+[source]
+----
+g.V().format("Hello, %{name}! You are %{age} years old.")
+----
+
+Implement by resolving `%{key}` tokens from the traverser's current element properties:
+
+[source,kotlin]
+----
+class FormatWithTokensStep(private val template: String) : MapStep<Element, String>() {
+    private val tokenRegex = Regex("""%\{(\w+)}""")
+
+    override fun map(traverser: Traverser<Element>): String {
+        val element = traverser.get()
+        return tokenRegex.replace(template) { match ->
+            element.value<Any?>(match.groupValues[1])?.toString() ?: ""
+        }
+    }
+}
+----
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+
+// Full-name construction
+val names = g.V().hasLabel("person")
+    .values<String>("firstName")
+    .concat(" ", g.V().values("lastName"))   // traversal argument form
+    .toList()
+
+// Normalise email addresses
+g.V().has("email", P.neq(null))
+    .values<String>("email")
+    .toLower()
+    .trim()
+    .toList()
+
+// Tag splitting
+g.V().values<String>("tags")
+    .split(",")
+    .unfold()
+    .trim()
+    .dedup()
+    .toList()
+
+// Format greeting
+g.V().hasLabel("person")
+    .format("Hello, %{name}!")
+    .toList()
+----
+
+== Test Plan
+
+* `StringStepTest` in `commonTest`:
+  - Each step: happy path with ASCII input
+  - Unicode / multi-byte characters
+  - Empty string input
+  - Null safety: step gracefully handles `null` element property (returns `null` or empty)
+  - `split()` followed by `unfold()` produces individual string traversers
+  - `format()` with missing tokens leaves placeholder empty
+
+== Acceptance Criteria
+
+- [x] All twelve steps implemented and available in `GraphTraversal`
+- [x] `format()` supports both `%s` and `%{key}` token forms
+- [x] Steps compose correctly in a pipeline
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#concat-step[TinkerPop 3.8.1: concat() step]
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#format-step[TinkerPop 3.8.1: format() step]
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#string-steps[TinkerPop 3.8.1: String Steps overview]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
+* xref:task-7.7.2-p-predicates.adoc[Task 7.7.2: P Predicate Additions (startingWith, endingWith, containing)]

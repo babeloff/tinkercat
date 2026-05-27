@@ -1,0 +1,138 @@
+= Task 7.4.4: element() Step
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+*Status*: ⏸️ TODO +
+*Priority*: LOW +
+*Estimated Effort*: 3–5 days +
+*Dependencies*: xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine] +
+*Upstream Reference*: TinkerPop 3.8.x `element()` step
+
+The `element()` step navigates from a `Property` or `VertexProperty` traverser
+back to the owning `Element` (`Vertex` or `Edge`).
+Before this step existed, users had to track element references in side-effects or
+restart the traversal from scratch.
+
+== Motivation
+
+A common pattern when working with multi-property vertices is to filter on property
+values and then operate on the owning vertex:
+
+[source,kotlin]
+----
+// Without element() — requires workaround
+g.V().hasLabel("person")
+    .properties<String>("phone")
+    .has("location", "mobile")
+    .select("v")    // requires a prior .as("v") on the vertex step
+----
+
+With `element()`:
+
+[source,kotlin]
+----
+g.V().hasLabel("person")
+    .properties<String>("phone")
+    .has("location", "mobile")
+    .element()      // navigate back to the owning Vertex
+    .dedup()
+    .values<String>("name")
+    .toList()
+----
+
+== Implementation Plan
+
+=== 1. `ElementStep`
+
+[source,kotlin]
+----
+class ElementStep<E : Element> : MapStep<Property<*>, E>() {
+    @Suppress("UNCHECKED_CAST")
+    override fun map(traverser: Traverser<Property<*>>): E =
+        when (val prop = traverser.get()) {
+            is VertexProperty<*> -> prop.element() as E
+            else                 -> prop.element() as E
+        }
+}
+----
+
+Both `Property<V>` and `VertexProperty<V>` expose `.element()` on the existing
+`Property` interface, so no new API is needed on the structure side.
+
+=== 2. `GraphTraversal` DSL Method
+
+[source,kotlin]
+----
+fun <S, E : Element> GraphTraversal<S, out Property<*>>.element(): GraphTraversal<S, E>
+----
+
+Because `element()` is generic over the returned element type, type inference may
+need an explicit type parameter at the call site in some contexts:
+
+[source,kotlin]
+----
+traversal.element<Vertex>()
+----
+
+=== 3. Type Safety Boundary
+
+`element()` is only valid when the current traversal type is `Property<*>` or a subtype.
+Calling it on a non-property traversal is a compile-time error in Kotlin due to the
+receiver constraint.
+
+== Usage Examples
+
+[source,kotlin]
+----
+val g = graph.traversal()
+
+// All vertices that have a "nickname" property with value "Al"
+val vertices = g.V()
+    .properties<String>("nickname")
+    .hasValue("Al")
+    .element<Vertex>()
+    .dedup()
+    .toList()
+
+// Edges whose "since" property is before 2020
+val edges = g.E()
+    .properties<Int>("year")
+    .has(P.lt(2020))
+    .element<Edge>()
+    .dedup()
+    .toList()
+
+// Multi-property: return distinct owners of any "email" property
+val owners = g.V()
+    .properties<String>("email")
+    .element<Vertex>()
+    .dedup()
+    .values<String>("name")
+    .toList()
+----
+
+== Test Plan
+
+* `ElementStepTest` in `commonTest`:
+  - `properties().element()` on vertex property returns the owning `Vertex`
+  - `properties().element()` on edge property returns the owning `Edge`
+  - `element().dedup()` collapses multiple property hits on the same vertex
+  - `properties().hasValue(...).element()` filters and navigates correctly
+  - Empty traversal (no matching properties) → empty result list
+
+== Acceptance Criteria
+
+- [x] `element()` navigates from `Property` / `VertexProperty` to the owning `Element`
+- [x] Works in mid-traversal pipelines following any `properties()` step
+- [x] Compiler rejects `element()` when the traversal type is not a `Property` subtype
+- [x] Tests pass on JVM, JavaScript, and Native
+
+== References
+
+* https://tinkerpop.apache.org/docs/3.8.1/reference/#element-step[TinkerPop 3.8.1: element() step]
+* xref:task-7.1.1-traversal-engine.adoc[Task 7.1.1: Traversal Engine]
