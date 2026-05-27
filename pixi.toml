@@ -5,70 +5,169 @@ name = "tinkercat"
 platforms = ["linux-64"]
 version = "0.1.0"
 
-# List all available Gradle tasks
+# ── Build ────────────────────────────────────────────────────────────────────
+
 [tasks.gradle-tasks]
 cmd = "gradle tasks"
+description = "List all available Gradle tasks"
 
-# Run arbitrary Gradle commands (pass arguments after task name)
 [tasks.gradle]
 cmd = "gradle"
+description = "Run an arbitrary Gradle task (pass the task name as an argument)"
 
-# Build the entire TinkerCat project (compile all targets and run tests)
 [tasks.build]
 cmd = "gradle build"
+description = "Compile all Kotlin targets and run the full test suite"
 
-# Compile all targets without running tests
 [tasks.compile-all]
 cmd = "gradle compileKotlinJvm compileKotlinJs compileKotlinNative"
 description = "Compile all Kotlin targets (JVM, JS, Native) without running tests"
 
-# Compile Kotlin source code for JVM target
 [tasks.compile]
 cmd = "gradle compileKotlinJvm"
+description = "Compile the JVM target only"
 
-# Run all test suites (may fail if there are compilation issues in some tests)
-[tasks.test]
-cmd = "gradle allTests"
-
-# Try to run tests with fallback to compilation check if they fail
-[tasks.test-safe]
-cmd = "gradle allTests || (echo 'Tests failed - checking what compiles...' && gradle compileKotlinJvm && echo 'JVM code compiles successfully' && gradle compileKotlinJs && echo 'JS code compiles successfully' && gradle compileKotlinNative && echo 'Native code compiles successfully')"
-
-# Check what compiles without running tests
-[tasks.test-compile-check]
-cmd = "echo 'Checking compilation...' && gradle compileKotlinJvm && echo '✅ JVM compiles' && gradle compileKotlinJs && echo '✅ JS compiles' && gradle compileKotlinNative && echo '✅ Native compiles' && echo 'All main code compiles successfully'"
-
-# Check if test code compiles
-[tasks.test-code-check]
-cmd = "echo 'Checking test compilation (may show errors)...' && (gradle compileTestKotlinJvm && echo '✅ JVM tests compile' || echo '❌ JVM test compilation failed') && (gradle compileTestKotlinJs && echo '✅ JS tests compile' || echo '❌ JS test compilation failed') && (gradle compileTestKotlinNative && echo '✅ Native tests compile' || echo '❌ Native test compilation failed')"
-
-# Run JVM-specific tests only
-[tasks.test-jvm]
-cmd = "gradle jvmTest"
-
-# Run JavaScript tests only (all JS test types)
-[tasks.test-js]
-cmd = "gradle jsTest"
-
-# Run Native tests only
-[tasks.test-native]
-cmd = "gradle nativeTest"
-
-# Run JavaScript tests in browser
-[tasks.test-js-browser]
-cmd = "gradle jsBrowserTest"
-
-# Run JavaScript tests in Node.js
-[tasks.test-js-node]
-cmd = "gradle jsNodeTest"
-
-# List all available test tasks
-[tasks.test-help]
-cmd = "echo 'Available test commands:' && echo '  pixi run test               - All tests (may have compilation issues)' && echo '  pixi run test-safe          - Try tests with fallback to compilation check' && echo '  pixi run test-compile-check - Check if main code compiles' && echo '  pixi run test-code-check    - Check if test code compiles' && echo '  pixi run test-jvm           - JVM tests only' && echo '  pixi run test-js            - JavaScript tests' && echo '  pixi run test-native        - Native tests' && echo '  pixi run test-js-browser    - JS tests in browser' && echo '  pixi run test-js-node       - JS tests in Node.js'"
-
-# Clean build artifacts and generated files
 [tasks.clean]
 cmd = "gradle clean"
+description = "Delete all Gradle build outputs and generated files"
+
+# ── Test ─────────────────────────────────────────────────────────────────────
+
+[tasks.test]
+cmd = "gradle allTests"
+description = "Run all test suites across JVM, JS, and Native targets"
+
+[tasks.test-safe]
+cmd = "gradle allTests || (echo 'Tests failed - checking what compiles...' && gradle compileKotlinJvm && echo 'JVM code compiles successfully' && gradle compileKotlinJs && echo 'JS code compiles successfully' && gradle compileKotlinNative && echo 'Native code compiles successfully')"
+description = "Run all tests; fall back to per-target compilation check on failure"
+
+[tasks.test-compile-check]
+cmd = "echo 'Checking compilation...' && gradle compileKotlinJvm && echo '✅ JVM compiles' && gradle compileKotlinJs && echo '✅ JS compiles' && gradle compileKotlinNative && echo '✅ Native compiles' && echo 'All main code compiles successfully'"
+description = "Verify that all main source targets compile without running tests"
+
+[tasks.test-code-check]
+cmd = "echo 'Checking test compilation (may show errors)...' && (gradle compileTestKotlinJvm && echo '✅ JVM tests compile' || echo '❌ JVM test compilation failed') && (gradle compileTestKotlinJs && echo '✅ JS tests compile' || echo '❌ JS test compilation failed') && (gradle compileTestKotlinNative && echo '✅ Native tests compile' || echo '❌ Native test compilation failed')"
+description = "Verify that test source code compiles for all targets"
+
+[tasks.test-jvm]
+cmd = "gradle jvmTest"
+description = "Run JVM tests only"
+
+[tasks.test-js]
+cmd = "gradle jsTest"
+description = "Run all JavaScript tests (browser and Node.js)"
+
+[tasks.test-native]
+cmd = "gradle nativeTest"
+description = "Run Kotlin/Native tests only"
+
+[tasks.test-js-browser]
+cmd = "gradle jsBrowserTest"
+description = "Run JavaScript tests in a headless browser"
+
+[tasks.test-js-node]
+cmd = "gradle jsNodeTest"
+description = "Run JavaScript tests under Node.js"
+
+[tasks.test-help]
+cmd = "echo 'Available test commands:' && echo '  pixi run test               - All tests (may have compilation issues)' && echo '  pixi run test-safe          - Try tests with fallback to compilation check' && echo '  pixi run test-compile-check - Check if main code compiles' && echo '  pixi run test-code-check    - Check if test code compiles' && echo '  pixi run test-jvm           - JVM tests only' && echo '  pixi run test-js            - JavaScript tests' && echo '  pixi run test-native        - Native tests' && echo '  pixi run test-js-browser    - JS tests in browser' && echo '  pixi run test-js-node       - JS tests in Node.js'"
+description = "Print a summary of all available test tasks"
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+
+[tasks.docs]
+cmd = "gradle generateDocs"
+description = "Generate project API documentation via Gradle"
+
+[tasks.docs-setup]
+cmd = "gem install asciidoctor asciidoctor-diagram asciidoctor-revealjs asciidoctor-pdf"
+description = "Install Ruby gems required for AsciiDoc documentation rendering"
+
+[tasks.docs-adoc]
+cmd = "asciidoctor -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.html"
+description = "Render docs/roadmap.adoc to HTML with diagram support"
+
+[tasks.docs-pdf]
+cmd = "asciidoctor-pdf -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.pdf"
+description = "Render docs/roadmap.adoc to PDF with diagram support"
+
+[tasks.docs-slides]
+cmd = "asciidoctor-revealjs docs/roadmap.adoc -o build/docs/roadmap-slides.html"
+description = "Render docs/roadmap.adoc as a reveal.js slide deck"
+
+[tasks.docs-all]
+cmd = "pixi run docs-adoc && pixi run docs-pdf && pixi run docs-slides"
+description = "Render docs/roadmap.adoc in all formats: HTML, PDF, and reveal.js slides"
+
+[tasks.docs-check]
+cmd = "ruby -e \"puts 'Ruby version: ' + RUBY_VERSION; %w[asciidoctor asciidoctor-diagram asciidoctor-revealjs asciidoctor-pdf].each {|gem| begin; require gem; puts gem + ': available'; rescue LoadError; puts gem + ': not available'; end}\""
+description = "Report Ruby version and whether each required asciidoctor gem is installed"
+
+# ── Python ────────────────────────────────────────────────────────────────────
+
+[tasks.python-native]
+cmd = "gradle linkNative"
+description = "Compile the Kotlin/Native target and link libtinkercat.so for Python ctypes use"
+
+[tasks.python-setup]
+cmd = "python -m pip install -e python/"
+description = "Install the tinkercat Python package in editable/development mode"
+
+[tasks.python-test]
+cmd = "python -m pytest python/tests/ -v"
+description = "Run the Python integration tests against the installed package"
+
+[tasks.python-build-test]
+cmd = "pixi run python-native && pixi run python-setup && pixi run python-test"
+description = "Full Python pipeline: build native library, install package, run tests"
+
+[tasks.python-dev]
+cmd = "python -c \"from tinkercat import TinkerCat; print('TinkerCat Python bindings loaded successfully')\""
+description = "Smoke-test the Python bindings by importing TinkerCat"
+
+# ── Demonstrations ────────────────────────────────────────────────────────────
+
+[tasks.runJvmDemo]
+cmd = "gradle runJvmDemo"
+description = "Run the JVM platform demo showcasing Java interop and enterprise features"
+
+[tasks.runJsNodeDemo]
+cmd = "gradle runJsNodeDemo"
+description = "Run the JavaScript platform demo in a Node.js environment"
+
+[tasks.runNativeDemo]
+cmd = "gradle runNativeDemo"
+description = "Run the Kotlin/Native platform demo showcasing native performance"
+
+# ── Compliance ────────────────────────────────────────────────────────────────
+
+# Options (passed after --):
+#   --format html|json     alternative output format (default: AsciiDoc)
+#   --download             pull fresh upstream tests before analysis
+#   --output <file>        explicit output path
+[tasks.compliance]
+cmd = "nu pixi-scripts/compliance_deviation_analysis.nu"
+description = "Analyze TinkerPop compliance deviations and write a report to build/reports/compliance/"
+
+# ── Packaging ─────────────────────────────────────────────────────────────────
+
+# Options (passed after --):
+#   --output-dir <path>   override the output directory (default: build/conda-packages)
+[tasks.package]
+cmd = "nu pixi-scripts/package-build.nu"
+description = "Build all conda packages defined in recipes/recipe.yaml using rattler-build"
+
+# ── Version management ────────────────────────────────────────────────────────
+
+[tasks.version-sync]
+cmd = "nu pixi-scripts/version-sync.nu"
+description = "Propagate the version from pixi.toml to recipes/recipe.yaml, build.gradle.kts, and python/tinkercat/__init__.py"
+
+[tasks.version-bump]
+cmd = "nu pixi-scripts/version-bump.nu"
+description = "Increment the patch version in pixi.toml, then run version-sync"
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
 
 [dependencies]
 gradle = "9.*"
@@ -80,93 +179,7 @@ pip = ">=26"
 hatchling = ">=1.29"
 rattler-build = ">=0.65"
 nushell = ">=0.109"
+yq = ">=4"
 
-# Documentation generation tasks
-[tasks.docs]
-cmd = "gradle generateDocs"
-
-# Install required gems for documentation
-[tasks.docs-setup]
-cmd = "gem install asciidoctor asciidoctor-diagram asciidoctor-revealjs asciidoctor-pdf"
-
-# Generate AsciiDoc documentation with diagrams
-[tasks.docs-adoc]
-cmd = "asciidoctor -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.html"
-
-# Generate PDF documentation
-[tasks.docs-pdf]
-cmd = "asciidoctor-pdf -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.pdf"
-
-# Generate reveal.js presentation
-[tasks.docs-slides]
-cmd = "asciidoctor-revealjs docs/roadmap.adoc -o build/docs/roadmap-slides.html"
-
-# Generate all available documentation formats
-[tasks.docs-all]
-cmd = "pixi run docs-adoc && pixi run docs-pdf && pixi run docs-slides"
-
-# Check available asciidoctor tools
-[tasks.docs-check]
-cmd = "ruby -e \"puts 'Ruby version: ' + RUBY_VERSION; %w[asciidoctor asciidoctor-diagram asciidoctor-revealjs asciidoctor-pdf].each {|gem| begin; require gem; puts gem + ': available'; rescue LoadError; puts gem + ': not available'; end}\""
-
-# Python platform support tasks
-
-# Build native shared library for Python
-[tasks.python-native]
-cmd = "gradle linkNative"
-description = "Build native shared library for Python integration"
-
-# Install Python package in development mode
-[tasks.python-setup]
-cmd = "python -m pip install -e python/"
-description = "Install Python package in development mode"
-
-# Run Python tests
-[tasks.python-test]
-cmd = "python -m pytest python/tests/ -v"
-description = "Run Python integration tests"
-
-# Build and test Python integration
-[tasks.python-build-test]
-cmd = "pixi run python-native && pixi run python-setup && pixi run python-test"
-description = "Complete Python integration build and test pipeline"
-
-# Python development test (for interactive testing)
-[tasks.python-dev]
-cmd = "python -c \"from tinkercat import TinkerCat; print('TinkerCat Python bindings loaded successfully')\""
-description = "Test Python bindings import"
-
-# Platform demonstration tasks
-
-# Run JVM platform demonstration
-[tasks.runJvmDemo]
-cmd = "gradle runJvmDemo"
-description = "Run JVM platform demonstration showcasing Java interop and enterprise features"
-
-# Run JavaScript platform demonstration in Node.js
-[tasks.runJsNodeDemo]
-cmd = "gradle runJsNodeDemo"
-description = "Run JavaScript platform demonstration in Node.js environment"
-
-# Run Native platform demonstration
-[tasks.runNativeDemo]
-cmd = "gradle runNativeDemo"
-description = "Run Native platform demonstration showcasing native performance optimizations"
-
-# Compliance deviation analysis
-# Default: AsciiDoc report in build/reports/compliance/
-# Options (passed after --):
-#   --format html|json     alternative output format
-#   --download             pull fresh upstream tests before analysis
-#   --output <file>        explicit output path
-[tasks.compliance]
-cmd = "nu pixi-scripts/compliance_deviation_analysis.nu"
-description = "Analyze TinkerPop compliance deviations (default: AsciiDoc report; pass -- --format html|json or -- --download)"
-
-# Conda package building with rattler-build
-# Builds all outputs in recipes/recipe.yaml in one invocation.
-# Options (passed after --):
-#   --output-dir <path>   override the output directory (default: build/conda-packages)
-[tasks.package]
-cmd = "nu pixi-scripts/package-build.nu"
-description = "Build all conda packages from recipes/recipe.yaml (pass -- --output-dir <path> to override output location)"
+[pypi-dependencies]
+toml-cli = "*"
