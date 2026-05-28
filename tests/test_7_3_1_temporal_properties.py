@@ -11,17 +11,7 @@ import pytest
 import json
 from datetime import datetime, date, timedelta, timezone
 
-try:
-    from tinkercat.temporal import (
-        TinkerInstant, TinkerLocalDate, TinkerLocalDateTime,
-        TinkerOffsetDateTime, TinkerDuration,
-    )
-    TEMPORAL_AVAILABLE = True
-except ImportError:
-    TEMPORAL_AVAILABLE = False
-
-from mocks import MockGraph
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Mock temporal types using Python's datetime
@@ -55,7 +45,6 @@ class TinkerInstant:
     def __ge__(self, other): return self._dt >= other._dt
     def __eq__(self, other): return isinstance(other, TinkerInstant) and self._dt == other._dt
 
-
 class TinkerLocalDate:
     def __init__(self, d: date):
         self._d = d
@@ -70,7 +59,6 @@ class TinkerLocalDate:
     def __lt__(self, other): return self._d < other._d
     def __eq__(self, other): return isinstance(other, TinkerLocalDate) and self._d == other._d
 
-
 class TinkerDuration:
     def __init__(self, td: timedelta):
         self._td = td
@@ -84,42 +72,39 @@ class TinkerDuration:
 
     def __eq__(self, other): return isinstance(other, TinkerDuration) and self._td == other._td
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 def test_store_and_retrieve_instant():
-    g = MockGraph()
+    g = TinkerCat()
     now = TinkerInstant.now()
     v = g.add_vertex("event", ts=now)
     assert v.value("ts") == now
-
+    g.close()
 
 def test_instant_from_epoch_ms_round_trip():
     ms = 1_700_000_000_000
     ts = TinkerInstant.from_epoch_ms(ms)
     assert ts.to_epoch_ms() == ms
 
-
 def test_instant_parse_iso8601():
     ts = TinkerInstant.parse("2024-01-15T12:00:00+00:00")
     assert "2024-01-15" in str(ts)
 
-
 def test_store_and_retrieve_local_date():
-    g = MockGraph()
+    g = TinkerCat()
     d = TinkerLocalDate.parse("2024-06-01")
     v = g.add_vertex("log", date=d)
     assert v.value("date") == d
-
+    g.close()
 
 def test_store_and_retrieve_duration():
-    g = MockGraph()
+    g = TinkerCat()
     dur = TinkerDuration.of_days(7)
     v = g.add_vertex("task", duration=dur)
     assert v.value("duration") == dur
-
+    g.close()
 
 def test_instant_ordering():
     t1 = TinkerInstant.parse("2024-01-01T00:00:00+00:00")
@@ -127,15 +112,13 @@ def test_instant_ordering():
     assert t1 < t2
     assert t2 > t1
 
-
 def test_local_date_ordering():
     d1 = TinkerLocalDate.parse("2023-01-01")
     d2 = TinkerLocalDate.parse("2024-01-01")
     assert d1 < d2
 
-
 def test_range_query_on_instant_properties():
-    g = MockGraph()
+    g = TinkerCat()
     dates = ["2024-01-01", "2024-06-01", "2024-12-01"]
     for ds in dates:
         ts = TinkerInstant.parse(f"{ds}T00:00:00+00:00")
@@ -143,7 +126,7 @@ def test_range_query_on_instant_properties():
     cutoff = TinkerInstant.parse("2024-07-01T00:00:00+00:00")
     before = [v for v in g.vertices() if v.value("ts") and v.value("ts") < cutoff]
     assert len(before) == 2
-
+    g.close()
 
 def test_graphson_instant_serialisation():
     ts = TinkerInstant.parse("2024-01-15T12:00:00+00:00")
@@ -153,7 +136,6 @@ def test_graphson_instant_serialisation():
     assert recovered["@type"] == "g:Instant"
     assert "2024-01-15" in recovered["@value"]
 
-
 def test_graphson_local_date_serialisation():
     d = TinkerLocalDate.parse("2024-06-01")
     doc = {"@type": "g:LocalDate", "@value": str(d)}
@@ -161,8 +143,8 @@ def test_graphson_local_date_serialisation():
     recovered = json.loads(text)
     assert recovered["@value"] == "2024-06-01"
 
-
 def test_null_temporal_value_is_none():
-    g = MockGraph()
+    g = TinkerCat()
     v = g.add_vertex("event")
     assert v.value("ts") is None
+    g.close()

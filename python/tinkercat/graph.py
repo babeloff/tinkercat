@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List, Iterator, Union
 import weakref
 
 from .bindings import NativeGraphHandle
+from .traversal import GraphTraversalSource
 from .exceptions import (
     TinkerCatError,
     TinkerCatNativeError,
@@ -47,6 +48,15 @@ class TinkerCat:
             self._closed = False
         except TinkerCatNativeError as e:
             raise TinkerCatError(f"Failed to create TinkerCat: {e}") from e
+
+    @classmethod
+    def open(cls) -> 'TinkerCat':
+        """Named factory function — mirrors the Kotlin companion object factory.
+
+        Prefer ``TinkerCat.open()`` at explicit, self-documenting call sites;
+        use ``TinkerCat()`` when brevity matters.
+        """
+        return cls()
 
     def __enter__(self):
         """Context manager entry."""
@@ -291,6 +301,10 @@ class TinkerCat:
             edge._cleanup()
             del self._edges[edge._ptr]
 
+    def traversal(self) -> GraphTraversalSource:
+        """Return a GraphTraversalSource backed by this graph."""
+        return GraphTraversalSource(self)
+
     def clear(self):
         """Remove all vertices and edges from the graph."""
         self._check_not_closed()
@@ -360,6 +374,10 @@ class Vertex:
 
     def get_property(self, key: str, default=None):
         """Get a property value by key."""
+        return self.properties.get(key, default)
+
+    def value(self, key: str, default=None):
+        """Alias for get_property; used by the traversal layer."""
         return self.properties.get(key, default)
 
     def set_property(self, key: str, value: Any):
@@ -480,6 +498,10 @@ class Edge:
 
     def get_property(self, key: str, default=None):
         """Get a property value by key."""
+        return self.properties.get(key, default)
+
+    def value(self, key: str, default=None):
+        """Alias for get_property; used by the traversal layer."""
         return self.properties.get(key, default)
 
     def set_property(self, key: str, value: Any):

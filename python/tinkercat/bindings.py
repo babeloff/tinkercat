@@ -19,6 +19,10 @@ from .exceptions import (
     raise_native_error
 )
 
+# True when the native library loads and exports all required symbols.
+# Import-safe: set after class definitions (see bottom of module).
+NATIVE_AVAILABLE: bool = False
+
 
 class TinkerCatNativeLibrary:
     """Wrapper for the native TinkerCat shared library."""
@@ -87,102 +91,96 @@ class TinkerCatNativeLibrary:
 
     def _load_library(self):
         """Load the native shared library."""
+        lib_path = None
         try:
             lib_path = self._find_native_library()
             self._lib = ctypes.CDLL(str(lib_path))
+        except TinkerCatLibraryError:
+            raise
         except Exception as e:
-            raise_library_error(str(lib_path) if 'lib_path' in locals() else "unknown", str(e))
+            raise_library_error(str(lib_path) if lib_path else "unknown", str(e))
 
     def _configure_functions(self):
         """Configure function signatures for all exported functions."""
+        missing: list = []
 
-        # Graph management functions
-        self._lib.tinkercat_create.restype = ctypes.c_void_p
-        self._lib.tinkercat_create.argtypes = []
+        def _bind(name: str, restype, argtypes: list):
+            try:
+                fn = getattr(self._lib, name)
+                fn.restype = restype
+                fn.argtypes = argtypes
+            except AttributeError:
+                missing.append(name)
 
-        self._lib.tinkercat_destroy.restype = None
-        self._lib.tinkercat_destroy.argtypes = [ctypes.c_void_p]
+        # Graph management
+        _bind('tinkercat_create',  ctypes.c_void_p, [])
+        _bind('tinkercat_destroy', None,            [ctypes.c_void_p])
 
         # Vertex operations
-        self._lib.tinkercat_add_vertex.restype = ctypes.c_void_p
-        self._lib.tinkercat_add_vertex.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-
-        self._lib.tinkercat_add_vertex_with_properties.restype = ctypes.c_void_p
-        self._lib.tinkercat_add_vertex_with_properties.argtypes = [
-            ctypes.c_void_p,  # graph
-            ctypes.c_char_p,  # id
-            ctypes.POINTER(ctypes.c_char_p),  # property keys
-            ctypes.POINTER(ctypes.c_char_p),  # property values
-            ctypes.c_int,  # property count
-        ]
+        _bind('tinkercat_add_vertex', ctypes.c_void_p,
+              [ctypes.c_void_p, ctypes.c_char_p])
+        _bind('tinkercat_add_vertex_with_properties', ctypes.c_void_p, [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.c_int,
+        ])
 
         # Edge operations
-        self._lib.tinkercat_add_edge.restype = ctypes.c_void_p
-        self._lib.tinkercat_add_edge.argtypes = [
-            ctypes.c_void_p,  # graph
-            ctypes.c_char_p,  # label
-            ctypes.c_void_p,  # out vertex
-            ctypes.c_void_p,  # in vertex
-        ]
+        _bind('tinkercat_add_edge', ctypes.c_void_p, [
+            ctypes.c_void_p, ctypes.c_char_p,
+            ctypes.c_void_p, ctypes.c_void_p,
+        ])
+        _bind('tinkercat_add_edge_with_properties', ctypes.c_void_p, [
+            ctypes.c_void_p, ctypes.c_char_p,
+            ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.c_int,
+        ])
 
-        self._lib.tinkercat_add_edge_with_properties.restype = ctypes.c_void_p
-        self._lib.tinkercat_add_edge_with_properties.argtypes = [
-            ctypes.c_void_p,  # graph
-            ctypes.c_char_p,  # label
-            ctypes.c_void_p,  # out vertex
-            ctypes.c_void_p,  # in vertex
-            ctypes.POINTER(ctypes.c_char_p),  # property keys
-            ctypes.POINTER(ctypes.c_char_p),  # property values
-            ctypes.c_int,  # property count
-        ]
+        # Query
+        _bind('tinkercat_vertex_count', ctypes.c_long, [ctypes.c_void_p])
+        _bind('tinkercat_edge_count',   ctypes.c_long, [ctypes.c_void_p])
 
-        # Query functions
-        self._lib.tinkercat_vertex_count.restype = ctypes.c_long
-        self._lib.tinkercat_vertex_count.argtypes = [ctypes.c_void_p]
+        # Property access
+        _bind('tinkercat_vertex_id', ctypes.c_int,
+              [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int])
+        _bind('tinkercat_edge_label', ctypes.c_int,
+              [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int])
 
-        self._lib.tinkercat_edge_count.restype = ctypes.c_long
-        self._lib.tinkercat_edge_count.argtypes = [ctypes.c_void_p]
+        # Cleanup
+        _bind('tinkercat_destroy_vertex', None, [ctypes.c_void_p])
+        _bind('tinkercat_destroy_edge',   None, [ctypes.c_void_p])
 
-        # Element property access functions
-        self._lib.tinkercat_vertex_id.restype = ctypes.c_int
-        self._lib.tinkercat_vertex_id.argtypes = [
-            ctypes.c_void_p,  # vertex
-            ctypes.c_char_p,  # buffer
-            ctypes.c_int,     # buffer size
-        ]
+        # Error helper
+        _bind('tinkercat_get_error_message', ctypes.c_int,
+              [ctypes.c_char_p, ctypes.c_int])
 
-        self._lib.tinkercat_edge_label.restype = ctypes.c_int
-        self._lib.tinkercat_edge_label.argtypes = [
-            ctypes.c_void_p,  # edge
-            ctypes.c_char_p,  # buffer
-            ctypes.c_int,     # buffer size
-        ]
-
-        # Element cleanup functions
-        self._lib.tinkercat_destroy_vertex.restype = None
-        self._lib.tinkercat_destroy_vertex.argtypes = [ctypes.c_void_p]
-
-        self._lib.tinkercat_destroy_edge.restype = None
-        self._lib.tinkercat_destroy_edge.argtypes = [ctypes.c_void_p]
-
-        # Error handling function
-        self._lib.tinkercat_get_error_message.restype = ctypes.c_int
-        self._lib.tinkercat_get_error_message.argtypes = [
-            ctypes.c_char_p,  # buffer
-            ctypes.c_int,     # buffer size
-        ]
+        if missing:
+            raise TinkerCatLibraryError(
+                f"Native library is missing required symbols: {', '.join(missing)}"
+            )
 
 
 class NativeGraphHandle:
     """Handle to a native TinkerCat instance."""
 
-    _lib_instance = None
+    _lib_instance: Optional["TinkerCatNativeLibrary"] = None
+    _lib_load_error: Optional[Exception] = None
 
     @classmethod
-    def _get_library(cls) -> TinkerCatNativeLibrary:
-        """Get the shared library instance (singleton)."""
+    def _get_library(cls) -> "TinkerCatNativeLibrary":
+        """Get the shared library instance (singleton); caches failures."""
+        if cls._lib_load_error is not None:
+            raise cls._lib_load_error
         if cls._lib_instance is None:
-            cls._lib_instance = TinkerCatNativeLibrary()
+            try:
+                cls._lib_instance = TinkerCatNativeLibrary()
+            except Exception as exc:
+                cls._lib_load_error = exc
+                raise
         return cls._lib_instance
 
     def __init__(self):
@@ -400,3 +398,11 @@ class NativeGraphHandle:
             return "Failed to retrieve error message"
 
         return buffer.value.decode('utf-8') if buffer.value else "No error message available"
+
+
+# Probe the library at import time so callers can guard with NATIVE_AVAILABLE.
+try:
+    NativeGraphHandle._get_library()
+    NATIVE_AVAILABLE = True
+except Exception:
+    NATIVE_AVAILABLE = False

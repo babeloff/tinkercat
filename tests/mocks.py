@@ -190,8 +190,193 @@ class MockGraph:
     def __exit__(self, *args) -> None:
         self.close()
 
+    def traversal(self) -> "MockGraphTraversalSource":
+        return MockGraphTraversalSource(self)
+
     def __repr__(self) -> str:
         return f"MockGraph(vertices={self.vertex_count}, edges={self.edge_count})"
+
+
+# ---------------------------------------------------------------------------
+# Traversal layer — mirrors the GraphTraversalSource / GraphTraversal API
+# ---------------------------------------------------------------------------
+
+class MockTraversal:
+    """Fluent, list-backed traversal that mirrors the Kotlin GraphTraversal API."""
+
+    def __init__(self, elements):
+        self._pipeline = list(elements)
+
+    # ── Filtering ────────────────────────────────────────────────────────────
+
+    def has_label(self, *labels):
+        self._pipeline = [e for e in self._pipeline if e.label in labels]
+        return self
+
+    def has(self, key, value=None):
+        if value is None:
+            self._pipeline = [e for e in self._pipeline
+                               if e.value(key) is not None]
+        else:
+            self._pipeline = [e for e in self._pipeline
+                               if e.value(key) == value]
+        return self
+
+    def has_not(self, key):
+        self._pipeline = [e for e in self._pipeline if e.value(key) is None]
+        return self
+
+    def has_id(self, *ids):
+        self._pipeline = [e for e in self._pipeline if e.id in ids]
+        return self
+
+    # ── Vertex navigation ────────────────────────────────────────────────────
+
+    def out(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.out_vertices(*labels))
+        self._pipeline = result
+        return self
+
+    def in_(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.in_vertices(*labels))
+        self._pipeline = result
+        return self
+
+    def both(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.both_vertices(*labels))
+        self._pipeline = result
+        return self
+
+    # ── Edge navigation ──────────────────────────────────────────────────────
+
+    def out_e(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.out_edges(*labels))
+        self._pipeline = result
+        return self
+
+    def in_e(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.in_edges(*labels))
+        self._pipeline = result
+        return self
+
+    def both_e(self, *labels):
+        result = []
+        for v in self._pipeline:
+            result.extend(v.both_edges(*labels))
+        self._pipeline = result
+        return self
+
+    def out_v(self):
+        self._pipeline = [e.out_vertex for e in self._pipeline
+                          if isinstance(e, MockEdge)]
+        return self
+
+    def in_v(self):
+        self._pipeline = [e.in_vertex for e in self._pipeline
+                          if isinstance(e, MockEdge)]
+        return self
+
+    # ── Projection ───────────────────────────────────────────────────────────
+
+    def values(self, *keys):
+        result = []
+        for e in self._pipeline:
+            for k in keys:
+                v = e.value(k)
+                if v is not None:
+                    result.append(v)
+        self._pipeline = result
+        return self
+
+    def id(self):
+        self._pipeline = [e.id for e in self._pipeline]
+        return self
+
+    def label(self):
+        self._pipeline = [e.label for e in self._pipeline]
+        return self
+
+    # ── Limiting ─────────────────────────────────────────────────────────────
+
+    def dedup(self):
+        seen, unique = set(), []
+        for item in self._pipeline:
+            key = getattr(item, "id", id(item))
+            if key not in seen:
+                seen.add(key)
+                unique.append(item)
+        self._pipeline = unique
+        return self
+
+    def limit(self, n):
+        self._pipeline = self._pipeline[:n]
+        return self
+
+    def skip(self, n):
+        self._pipeline = self._pipeline[n:]
+        return self
+
+    def range(self, low, high):
+        self._pipeline = self._pipeline[low:high]
+        return self
+
+    def tail(self, n=1):
+        self._pipeline = self._pipeline[-n:]
+        return self
+
+    # ── Terminal ─────────────────────────────────────────────────────────────
+
+    def to_list(self) -> list:
+        return list(self._pipeline)
+
+    def to_set(self) -> set:
+        return set(self._pipeline)
+
+    def next(self):
+        return self._pipeline[0] if self._pipeline else None
+
+    def try_next(self):
+        return self._pipeline[0] if self._pipeline else None
+
+    def has_next(self) -> bool:
+        return bool(self._pipeline)
+
+    def count(self):
+        self._pipeline = [len(self._pipeline)]
+        return self
+
+    def iterate(self):
+        self._pipeline = []
+        return self
+
+
+class MockGraphTraversalSource:
+    """Source for mock traversals — mirrors GraphTraversalSource."""
+
+    def __init__(self, graph: "MockGraph"):
+        self._graph = graph
+
+    def V(self, *ids) -> MockTraversal:
+        verts = list(self._graph.vertices())
+        if ids:
+            verts = [v for v in verts if v.id in ids]
+        return MockTraversal(verts)
+
+    def E(self, *ids) -> MockTraversal:
+        edges = list(self._graph.edges())
+        if ids:
+            edges = [e for e in edges if e.id in ids]
+        return MockTraversal(edges)
 
 
 # ---------------------------------------------------------------------------

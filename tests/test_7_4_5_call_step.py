@@ -9,8 +9,7 @@ See docs/project/changelog/task-7.4.5-call-step.adoc.
 import pytest
 from typing import Any, Dict, Iterator, Optional
 
-from mocks import MockGraph
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Mock service infrastructure
@@ -26,13 +25,11 @@ class TraversalCallbackService:
     ) -> Iterator[Dict[str, Any]]:
         raise NotImplementedError
 
-
 class EchoService(TraversalCallbackService):
     name = "echo"
 
     def execute(self, context, inner_traversal=None):
         return iter([context])
-
 
 class UpperCaseService(TraversalCallbackService):
     """Returns context with all string values uppercased."""
@@ -41,7 +38,6 @@ class UpperCaseService(TraversalCallbackService):
     def execute(self, context, inner_traversal=None):
         return iter([{k: v.upper() if isinstance(v, str) else v
                       for k, v in context.items()}])
-
 
 class ServiceRegistry:
     def __init__(self):
@@ -58,7 +54,6 @@ class ServiceRegistry:
             raise ValueError(f"No service registered: '{name}'")
         return list(self._services[name].execute(context, inner_traversal))
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -70,10 +65,8 @@ def test_echo_service_returns_context():
     assert len(result) == 1
     assert result[0] == ctx
 
-
 def test_echo_service_name():
     assert EchoService.name == "echo"
-
 
 def test_registry_register_returns_new_instance():
     r1 = ServiceRegistry()
@@ -82,18 +75,15 @@ def test_registry_register_returns_new_instance():
     with pytest.raises(ValueError):
         r1.call("echo", {})
 
-
 def test_registry_call_known_service():
     r = ServiceRegistry().register(EchoService())
     result = r.call("echo", {"key": "value"})
     assert result == [{"key": "value"}]
 
-
 def test_registry_call_unknown_service_raises():
     r = ServiceRegistry()
     with pytest.raises(ValueError, match="No service registered"):
         r.call("nonexistent", {})
-
 
 def test_two_services_coexist():
     r = ServiceRegistry().register(EchoService()).register(UpperCaseService())
@@ -102,13 +92,11 @@ def test_two_services_coexist():
     assert echo_r[0]["msg"] == "hello"
     assert upper_r[0]["msg"] == "HELLO"
 
-
 def test_uppercase_service_only_affects_strings():
     svc = UpperCaseService()
     result = list(svc.execute({"name": "alice", "age": 30}))
     assert result[0]["name"] == "ALICE"
     assert result[0]["age"] == 30
-
 
 def test_mid_traversal_call_receives_traverser_context():
     class CapturingService(TraversalCallbackService):
@@ -121,15 +109,17 @@ def test_mid_traversal_call_receives_traverser_context():
 
     svc = CapturingService()
     r = ServiceRegistry().register(svc)
-    g = MockGraph()
-    v = g.add_vertex("person", name="Alice")
+    g = TinkerCat()
+    try:
+        v = g.add_vertex("person", name="Alice")
 
-    ctx = {"_traverser": v.id, "mode": "test"}
-    r.call("capture", ctx)
+        ctx = {"_traverser": v.id, "mode": "test"}
+        r.call("capture", ctx)
 
-    assert len(svc.received_contexts) == 1
-    assert svc.received_contexts[0]["_traverser"] == v.id
-
+        assert len(svc.received_contexts) == 1
+        assert svc.received_contexts[0]["_traverser"] == v.id
+    finally:
+        g.close()
 
 def test_service_with_empty_context():
     r = ServiceRegistry().register(EchoService())

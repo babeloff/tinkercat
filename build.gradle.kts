@@ -17,7 +17,7 @@ plugins {
 
 group = "org.apache.tinkerpop.kotlin"
 
-version = "1.0.0-SNAPSHOT"
+version = "0.1.1-SNAPSHOT"
 
 repositories { mavenCentral() }
 
@@ -748,7 +748,7 @@ tasks.register("buildTypeScriptPackage") {
         val packageJson = """
         {
           "name": "tinkercat",
-          "version": "1.0.0-SNAPSHOT",
+          "version": "0.1.1-SNAPSHOT",
           "description": "Kotlin Multiplatform TinkerPop Graph Database",
           "main": "tinkercat.js",
           "types": "tinkercat.d.ts",

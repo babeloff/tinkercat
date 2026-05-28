@@ -9,13 +9,11 @@ See docs/project/changelog/task-7.4.1-merge-steps.adoc.
 import pytest
 from enum import Enum
 
-from mocks import MockGraph
-
+from tinkercat import TinkerCat
 
 class Merge(Enum):
     onCreate = "onCreate"
     onMatch  = "onMatch"
-
 
 def merge_v(graph, search_criteria, on_create=None, on_match=None):
     """Pure-Python implementation of mergeV() semantics."""
@@ -33,14 +31,13 @@ def merge_v(graph, search_criteria, on_create=None, on_match=None):
         if on_match:
             for k, val in on_match.items():
                 if k != "label":
-                    candidate.property(k, val)
+                    candidate.set_property(k, val)
         return candidate
     else:
         create_props = on_create if on_create else search_criteria
         props = {k: v for k, v in create_props.items() if k != "label"}
         lbl = create_props.get("label", label)
         return graph.add_vertex(lbl, **props)
-
 
 def merge_e(graph, search_criteria, on_create=None, on_match=None):
     """Pure-Python implementation of mergeE() semantics."""
@@ -68,7 +65,7 @@ def merge_e(graph, search_criteria, on_create=None, on_match=None):
         if on_match:
             for k, val in on_match.items():
                 if k not in ("label", "out", "in"):
-                    candidate.property(k, val)
+                    candidate.set_property(k, val)
         return candidate
     else:
         create_props = on_create if on_create else search_criteria
@@ -78,86 +75,104 @@ def merge_e(graph, search_criteria, on_create=None, on_match=None):
         assert out_v is not None and in_v is not None
         return graph.add_edge(lbl, out_v, in_v, **props)
 
-
 # ---------------------------------------------------------------------------
 # mergeV tests
 # ---------------------------------------------------------------------------
 
 def test_merge_v_creates_when_missing():
-    g = MockGraph()
-    v = merge_v(g, {"label": "person", "email": "alice@example.com"},
-                on_create={"label": "person", "email": "alice@example.com", "created": True})
-    assert g.vertex_count == 1
-    assert v.value("email") == "alice@example.com"
-    assert v.value("created") is True
-
+    g = TinkerCat()
+    try:
+        v = merge_v(g, {"label": "person", "email": "alice@example.com"},
+                    on_create={"label": "person", "email": "alice@example.com", "created": True})
+        assert g.vertex_count == 1
+        assert v.value("email") == "alice@example.com"
+        assert v.value("created") is True
+    finally:
+        g.close()
 
 def test_merge_v_matches_existing():
-    g = MockGraph()
-    existing = g.add_vertex("person", email="alice@example.com", lastSeen="old")
-    merge_v(g, {"label": "person", "email": "alice@example.com"},
-            on_match={"lastSeen": "new"})
-    assert g.vertex_count == 1
-    assert existing.value("lastSeen") == "new"
-
+    g = TinkerCat()
+    try:
+        existing = g.add_vertex("person", email="alice@example.com", lastSeen="old")
+        merge_v(g, {"label": "person", "email": "alice@example.com"},
+                on_match={"lastSeen": "new"})
+        assert g.vertex_count == 1
+        assert existing.value("lastSeen") == "new"
+    finally:
+        g.close()
 
 def test_merge_v_no_on_create_uses_search_criteria():
-    g = MockGraph()
-    v = merge_v(g, {"label": "person", "name": "Bob"})
-    assert v.value("name") == "Bob"
-
+    g = TinkerCat()
+    try:
+        v = merge_v(g, {"label": "person", "name": "Bob"})
+        assert v.value("name") == "Bob"
+    finally:
+        g.close()
 
 def test_merge_v_no_on_match_returns_unchanged():
-    g = MockGraph()
-    g.add_vertex("person", email="x@y.com", score=10)
-    v = merge_v(g, {"label": "person", "email": "x@y.com"})
-    assert v.value("score") == 10
-
+    g = TinkerCat()
+    try:
+        g.add_vertex("person", email="x@y.com", score=10)
+        v = merge_v(g, {"label": "person", "email": "x@y.com"})
+        assert v.value("score") == 10
+    finally:
+        g.close()
 
 def test_merge_v_idempotent():
-    g = MockGraph()
-    criteria = {"label": "person", "email": "alice@example.com"}
-    merge_v(g, criteria)
-    merge_v(g, criteria)
-    assert g.vertex_count == 1
-
+    g = TinkerCat()
+    try:
+        criteria = {"label": "person", "email": "alice@example.com"}
+        merge_v(g, criteria)
+        merge_v(g, criteria)
+        assert g.vertex_count == 1
+    finally:
+        g.close()
 
 # ---------------------------------------------------------------------------
 # mergeE tests
 # ---------------------------------------------------------------------------
 
 def test_merge_e_creates_edge():
-    g = MockGraph()
-    a = g.add_vertex("person")
-    b = g.add_vertex("person")
-    e = merge_e(g, {"label": "knows", "out": a, "in": b})
-    assert g.edge_count == 1
-    assert e.label == "knows"
-
+    g = TinkerCat()
+    try:
+        a = g.add_vertex("person")
+        b = g.add_vertex("person")
+        e = merge_e(g, {"label": "knows", "out": a, "in": b})
+        assert g.edge_count == 1
+        assert e.label == "knows"
+    finally:
+        g.close()
 
 def test_merge_e_matches_existing_edge():
-    g = MockGraph()
-    a = g.add_vertex("person")
-    b = g.add_vertex("person")
-    existing = g.add_edge("knows", a, b, since="2020")
-    result = merge_e(g, {"label": "knows", "out": a, "in": b},
-                     on_match={"since": "2024"})
-    assert g.edge_count == 1
-    assert result.value("since") == "2024"
-
+    g = TinkerCat()
+    try:
+        a = g.add_vertex("person")
+        b = g.add_vertex("person")
+        existing = g.add_edge("knows", a, b, since="2020")
+        result = merge_e(g, {"label": "knows", "out": a, "in": b},
+                         on_match={"since": "2024"})
+        assert g.edge_count == 1
+        assert result.value("since") == "2024"
+    finally:
+        g.close()
 
 def test_merge_e_requires_label():
-    g = MockGraph()
-    a = g.add_vertex("n")
-    b = g.add_vertex("n")
-    with pytest.raises(ValueError, match="label"):
-        merge_e(g, {"out": a, "in": b})
-
+    g = TinkerCat()
+    try:
+        a = g.add_vertex("n")
+        b = g.add_vertex("n")
+        with pytest.raises(ValueError, match="label"):
+            merge_e(g, {"out": a, "in": b})
+    finally:
+        g.close()
 
 def test_merge_e_idempotent():
-    g = MockGraph()
-    a = g.add_vertex("n")
-    b = g.add_vertex("n")
-    merge_e(g, {"label": "link", "out": a, "in": b})
-    merge_e(g, {"label": "link", "out": a, "in": b})
-    assert g.edge_count == 1
+    g = TinkerCat()
+    try:
+        a = g.add_vertex("n")
+        b = g.add_vertex("n")
+        merge_e(g, {"label": "link", "out": a, "in": b})
+        merge_e(g, {"label": "link", "out": a, "in": b})
+        assert g.edge_count == 1
+    finally:
+        g.close()

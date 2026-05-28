@@ -10,12 +10,7 @@ import pytest
 import time
 import logging
 
-
-try:
-    from tinkercat import TinkerCat
-except ImportError:
-    from mocks import MockGraph as TinkerCat
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -37,11 +32,9 @@ def test_python_logging_integration():
 
     assert any("test message" in m for m in handler)
 
-
 def test_logger_has_correct_name():
     logger = logging.getLogger("tinkercat")
     assert "tinkercat" in logger.name
-
 
 # ---------------------------------------------------------------------------
 # Performance measurement utility
@@ -63,7 +56,6 @@ class Timer:
     def elapsed_ms(self):
         return self._elapsed * 1000 if self._elapsed is not None else None
 
-
 def test_timer_measures_elapsed_time():
     t = Timer()
     t.start()
@@ -71,7 +63,6 @@ def test_timer_measures_elapsed_time():
     t.stop()
     assert t.elapsed_ms is not None
     assert t.elapsed_ms >= 10.0
-
 
 def test_timer_start_stop_idempotent():
     t = Timer()
@@ -84,35 +75,24 @@ def test_timer_start_stop_idempotent():
     assert first is not None
     assert second is not None
 
-
 # ---------------------------------------------------------------------------
 # Graph creation sanity (generic capability)
 # ---------------------------------------------------------------------------
 
 def test_graph_creation_and_closure():
-    g = TinkerCat.open() if hasattr(TinkerCat, "open") else TinkerCat()
+    g = TinkerCat()
     try:
         assert g is not None
     finally:
-        if hasattr(g, "close"):
-            g.close()
-
+        g.close()
 
 def test_graph_context_manager():
-    Graph = TinkerCat
-    if hasattr(TinkerCat, "open"):
-        g = TinkerCat.open()
-    else:
-        g = TinkerCat()
-    with g:
+    with TinkerCat() as g:
         v = g.add_vertex("node", name="test")
         assert v is not None
 
-
 def test_graph_supports_basic_vertex_operations():
-    g = TinkerCat.open() if hasattr(TinkerCat, "open") else TinkerCat()
-    v = g.add_vertex("test")
-    v.property("key", "value")
-    assert v.value("key") == "value"
-    if hasattr(g, "close"):
-        g.close()
+    with TinkerCat() as g:
+        v = g.add_vertex("test")
+        v.set_property("key", "value")
+        assert v.value("key") == "value"

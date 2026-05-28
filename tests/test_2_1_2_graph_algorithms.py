@@ -9,19 +9,9 @@ See docs/project/changelog/task-2.1.2-graph-algorithms.adoc.
 import pytest
 from collections import deque
 
-try:
-    from tinkercat import TinkerCat
-    from tinkercat.algorithms import (
-        bfs, dfs, shortest_path, connected_components,
-        has_cycle, graph_diameter,
-    )
-    ALGO_AVAILABLE = True
-except ImportError:
-    ALGO_AVAILABLE = False
-    from mocks import MockGraph as TinkerCat
+from tinkercat import TinkerCat
 
-from mocks import build_modern_graph, MockGraph
-
+from mocks import build_modern_graph
 
 # ---------------------------------------------------------------------------
 # Pure-Python reference implementations used when bindings are absent
@@ -37,7 +27,6 @@ def _bfs(graph, start_vertex):
         order.append(v)
         queue.extend(n for n in v.out_vertices() if n.id not in visited)
     return order
-
 
 def _shortest_path(graph, src, dst):
     prev, dist = {src.id: None}, {src.id: 0}
@@ -57,25 +46,22 @@ def _shortest_path(graph, src, dst):
         cur = prev.get(cur.id)
     return list(reversed(path))
 
-
 @pytest.fixture
 def g():
-    graph = MockGraph()
+    graph = TinkerCat()
     build_modern_graph(graph)
-    return graph
-
+    yield graph
+    graph.close()
 
 def test_bfs_visits_all_reachable_vertices(g):
     marko = next(v for v in g.vertices() if v.value("name") == "marko")
     visited = _bfs(g, marko)
     assert len(visited) >= 1
 
-
 def test_bfs_starts_from_given_vertex(g):
     marko = next(v for v in g.vertices() if v.value("name") == "marko")
     visited = _bfs(g, marko)
     assert visited[0].id == marko.id
-
 
 def test_shortest_path_direct_neighbor(g):
     marko = next(v for v in g.vertices() if v.value("name") == "marko")
@@ -86,7 +72,6 @@ def test_shortest_path_direct_neighbor(g):
     assert path[0].id == marko.id
     assert path[-1].id == vadas.id
 
-
 def test_shortest_path_no_route_returns_none(g):
     marko = next(v for v in g.vertices() if v.value("name") == "marko")
     # vadas has no outgoing edges in modern graph
@@ -94,88 +79,96 @@ def test_shortest_path_no_route_returns_none(g):
     path = _shortest_path(g, vadas, marko)
     assert path is None
 
-
 def test_connected_graph_has_one_component():
-    g2 = MockGraph()
-    a = g2.add_vertex("node", name="a")
-    b = g2.add_vertex("node", name="b")
-    c = g2.add_vertex("node", name="c")
-    g2.add_edge("link", a, b)
-    g2.add_edge("link", b, c)
-    # DFS reachability from a
-    reachable = set()
-    stack = [a]
-    while stack:
-        v = stack.pop()
-        if v.id in reachable:
-            continue
-        reachable.add(v.id)
-        stack.extend(v.out_vertices())
-    assert len(reachable) == 3
-
+    g2 = TinkerCat()
+    try:
+        a = g2.add_vertex("node", name="a")
+        b = g2.add_vertex("node", name="b")
+        c = g2.add_vertex("node", name="c")
+        g2.add_edge("link", a, b)
+        g2.add_edge("link", b, c)
+        # DFS reachability from a
+        reachable = set()
+        stack = [a]
+        while stack:
+            v = stack.pop()
+            if v.id in reachable:
+                continue
+            reachable.add(v.id)
+            stack.extend(v.out_vertices())
+        assert len(reachable) == 3
+    finally:
+        g2.close()
 
 def test_disconnected_graph_has_multiple_components():
-    g2 = MockGraph()
-    a = g2.add_vertex("node", name="a")
-    b = g2.add_vertex("node", name="b")
-    c = g2.add_vertex("node", name="c")
-    g2.add_edge("link", a, b)
-    # c is isolated
-    reachable_from_a = set()
-    stack = [a]
-    while stack:
-        v = stack.pop()
-        if v.id in reachable_from_a:
-            continue
-        reachable_from_a.add(v.id)
-        stack.extend(v.out_vertices())
-    assert c.id not in reachable_from_a
-
+    g2 = TinkerCat()
+    try:
+        a = g2.add_vertex("node", name="a")
+        b = g2.add_vertex("node", name="b")
+        c = g2.add_vertex("node", name="c")
+        g2.add_edge("link", a, b)
+        # c is isolated
+        reachable_from_a = set()
+        stack = [a]
+        while stack:
+            v = stack.pop()
+            if v.id in reachable_from_a:
+                continue
+            reachable_from_a.add(v.id)
+            stack.extend(v.out_vertices())
+        assert c.id not in reachable_from_a
+    finally:
+        g2.close()
 
 def test_cycle_detection_in_cyclic_graph():
-    g2 = MockGraph()
-    a = g2.add_vertex("node", name="a")
-    b = g2.add_vertex("node", name="b")
-    c = g2.add_vertex("node", name="c")
-    g2.add_edge("link", a, b)
-    g2.add_edge("link", b, c)
-    g2.add_edge("link", c, a)  # cycle
-    # Simple DFS cycle detection
-    visited, rec_stack = set(), set()
+    g2 = TinkerCat()
+    try:
+        a = g2.add_vertex("node", name="a")
+        b = g2.add_vertex("node", name="b")
+        c = g2.add_vertex("node", name="c")
+        g2.add_edge("link", a, b)
+        g2.add_edge("link", b, c)
+        g2.add_edge("link", c, a)  # cycle
+        # Simple DFS cycle detection
+        visited, rec_stack = set(), set()
 
-    def has_cycle_dfs(v):
-        visited.add(v.id)
-        rec_stack.add(v.id)
-        for n in v.out_vertices():
-            if n.id not in visited:
-                if has_cycle_dfs(n):
+        def has_cycle_dfs(v):
+            visited.add(v.id)
+            rec_stack.add(v.id)
+            for n in v.out_vertices():
+                if n.id not in visited:
+                    if has_cycle_dfs(n):
+                        return True
+                elif n.id in rec_stack:
                     return True
-            elif n.id in rec_stack:
-                return True
-        rec_stack.discard(v.id)
-        return False
+            rec_stack.discard(v.id)
+            return False
 
-    assert has_cycle_dfs(a)
-
+        assert has_cycle_dfs(a)
+    finally:
+        g2.close()
 
 def test_acyclic_graph_no_cycle():
-    g2 = MockGraph()
-    a = g2.add_vertex("node", name="a")
-    b = g2.add_vertex("node", name="b")
-    g2.add_edge("link", a, b)
+    g2 = TinkerCat()
+    try:
+        a = g2.add_vertex("node", name="a")
+        b = g2.add_vertex("node", name="b")
+        g2.add_edge("link", a, b)
 
-    visited, rec_stack = set(), set()
+        visited, rec_stack = set(), set()
 
-    def has_cycle_dfs(v):
-        visited.add(v.id)
-        rec_stack.add(v.id)
-        for n in v.out_vertices():
-            if n.id not in visited:
-                if has_cycle_dfs(n):
+        def has_cycle_dfs(v):
+            visited.add(v.id)
+            rec_stack.add(v.id)
+            for n in v.out_vertices():
+                if n.id not in visited:
+                    if has_cycle_dfs(n):
+                        return True
+                elif n.id in rec_stack:
                     return True
-            elif n.id in rec_stack:
-                return True
-        rec_stack.discard(v.id)
-        return False
+            rec_stack.discard(v.id)
+            return False
 
-    assert not has_cycle_dfs(a)
+        assert not has_cycle_dfs(a)
+    finally:
+        g2.close()

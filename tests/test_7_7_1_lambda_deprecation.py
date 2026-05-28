@@ -8,16 +8,18 @@ See docs/project/changelog/task-7.7.1-lambda-deprecation.adoc.
 
 import pytest
 
-from mocks import MockGraph, build_modern_graph
-from test_7_1_1_traversal_engine import MockTraversal, MockGraphTraversalSource
+from tinkercat import TinkerCat
 
+from mocks import build_modern_graph
 
 # ---------------------------------------------------------------------------
-# Extended MockTraversal with lambda-accepting (deprecated) methods and
-# their anonymous-traversal replacements
+# Standalone ExtendedTraversal — no MockTraversal inheritance
 # ---------------------------------------------------------------------------
 
-class ExtendedTraversal(MockTraversal):
+class ExtendedTraversal:
+
+    def __init__(self, elements):
+        self._pipeline = list(elements)
 
     # ── Deprecated lambda forms ──────────────────────────────────────────
     def filter_lambda(self, predicate):
@@ -53,6 +55,11 @@ class ExtendedTraversal(MockTraversal):
         store.extend(e.id for e in self._pipeline)
         return self
 
+    def to_list(self):
+        return list(self._pipeline)
+
+    def has_next(self):
+        return bool(self._pipeline)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -60,22 +67,21 @@ class ExtendedTraversal(MockTraversal):
 
 @pytest.fixture
 def g():
-    graph = MockGraph()
+    graph = TinkerCat()
     build_modern_graph(graph)
-    return graph
-
+    yield graph
+    graph.close()
 
 @pytest.fixture
 def src(g):
-    return MockGraphTraversalSource(g)
-
+    return g.traversal()
 
 # ---------------------------------------------------------------------------
 # Tests — lambda form vs. anonymous-traversal form produce same results
 # ---------------------------------------------------------------------------
 
 def test_filter_lambda_equiv_has_label(src):
-    t_lambda  = ExtendedTraversal(src.V().to_list())
+    t_lambda    = ExtendedTraversal(src.V().to_list())
     t_traversal = ExtendedTraversal(src.V().to_list())
 
     t_lambda.filter_lambda(lambda v: v.label == "person")
@@ -83,7 +89,6 @@ def test_filter_lambda_equiv_has_label(src):
 
     assert sorted(v.id for v in t_lambda.to_list()) == \
            sorted(v.id for v in t_traversal.to_list())
-
 
 def test_map_lambda_equiv_map_values(src):
     t_lambda    = ExtendedTraversal(src.V().has_label("person").to_list())
@@ -93,7 +98,6 @@ def test_map_lambda_equiv_map_values(src):
     t_traversal.map_values("name")
 
     assert sorted(t_lambda.to_list()) == sorted(t_traversal.to_list())
-
 
 def test_side_effect_lambda_equiv_store(src):
     log_lambda    = []
@@ -109,7 +113,6 @@ def test_side_effect_lambda_equiv_store(src):
 
     assert sorted(log_lambda) == sorted(log_traversal)
 
-
 def test_anonymous_traversal_filter_is_gremlin_compatible(src):
     """Anonymous traversal form can be serialised as a filter spec."""
     filter_spec = {"key": "label", "value": "person"}
@@ -122,21 +125,18 @@ def test_anonymous_traversal_filter_is_gremlin_compatible(src):
         .to_list()
     assert len(result) == 4
 
-
 def test_map_values_returns_correct_projection(src):
     names = ExtendedTraversal(src.V().has_label("person").to_list()) \
         .map_values("name") \
         .to_list()
     assert sorted(names) == ["josh", "marko", "peter", "vadas"]
 
-
 def test_filter_lambda_is_logically_equivalent_to_has(src):
-    via_lambda  = ExtendedTraversal(src.V().to_list()) \
+    via_lambda = ExtendedTraversal(src.V().to_list()) \
         .filter_lambda(lambda v: v.value("name") == "marko") \
         .to_list()
-    via_has     = src.V().has("name", "marko").to_list()
+    via_has = src.V().has("name", "marko").to_list()
     assert len(via_lambda) == len(via_has) == 1
-
 
 def test_side_effect_does_not_alter_pipeline(src):
     log = []

@@ -8,8 +8,9 @@ compiled from Kotlin/Native.
 Example usage:
     from tinkercat import TinkerCat
 
-    # Create a new graph
-    graph = TinkerCat()
+    # Create a new graph — two equivalent factory forms:
+    graph = TinkerCat()        # concise
+    graph = TinkerCat.open()   # self-documenting
 
     # Add vertices
     alice = graph.add_vertex("person", name="Alice", age=30)
@@ -22,13 +23,14 @@ Example usage:
     print(f"Graph has {graph.vertex_count} vertices and {graph.edge_count} edges")
 """
 
-__version__ = "1.0.0"
+__version__ = "0.1.1"
 __author__ = "Apache TinkerPop"
 __email__ = "dev@tinkerpop.apache.org"
 
 # Import main classes for public API
 from .graph import TinkerCat, Vertex, Edge
 from .exceptions import TinkerCatError
+from .bindings import NATIVE_AVAILABLE
 
 # Define what gets imported with "from tinkercat import *"
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
     "Vertex",
     "Edge",
     "TinkerCatError",
+    "NATIVE_AVAILABLE",
 ]
 
 # Package metadata

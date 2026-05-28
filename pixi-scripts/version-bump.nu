@@ -26,13 +26,8 @@ def main [] {
 
     print $"── Bumping version ($current) → ($next) ────────────────────────────"
 
-    # toml-cli preserves comments and formatting. Capture before writing so that
-    # any error output from toml-cli never overwrites pixi.toml.
-    let new_toml = (^toml set --toml-path pixi.toml workspace.version $next)
-    if ($new_toml | is-empty) {
-        error make { msg: "toml set produced empty output — pixi.toml not modified" }
-    }
-    $new_toml | save --force pixi.toml
+    # toml-cli edits pixi.toml in-place and produces no stdout output.
+    ^toml set --toml-path pixi.toml workspace.version $next
     print "  ✓ pixi.toml"
 
     nu pixi-scripts/version-sync.nu

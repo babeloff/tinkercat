@@ -7,6 +7,7 @@ import org.apache.tinkerpop.gremlin.structure.*
 import org.apache.tinkerpop.gremlin.tinkercat.structure.iterators.TinkerEdgeIterator
 import org.apache.tinkerpop.gremlin.tinkercat.structure.iterators.TinkerVertexIterator
 import org.apache.tinkerpop.gremlin.tinkercat.util.VertexCastingManager
+import org.apache.tinkerpop.gremlin.process.traversal.GraphTraversalSource
 
 /**
  * An in-memory graph database implementation of TinkerPop's Graph interface.
@@ -302,6 +303,16 @@ class TinkerCat private constructor(private val configuration: Map<String, Any?>
         // TinkerCat is in-memory, so no cleanup is needed
         // In a persistent implementation, this would save to disk
     }
+
+    /**
+     * Return a [GraphTraversalSource] backed by this graph.
+     *
+     * ```kotlin
+     * val g = graph.traversal()
+     * val names = g.V().hasLabel("person").values<String>("name").toList()
+     * ```
+     */
+    fun traversal(): GraphTraversalSource = GraphTraversalSource(this)
 
     /**
      * Create an index for faster property lookups.
@@ -897,13 +908,21 @@ class TinkerCat private constructor(private val configuration: Map<String, Any?>
         const val GREMLIN_TINKERCAT_GRAPH_LOCATION = "gremlin.tinkerGraph.graphLocation"
         const val GREMLIN_TINKERCAT_GRAPH_FORMAT = "gremlin.tinkerGraph.graphFormat"
 
-        /** Create a new TinkerCat instance. */
-        fun open(): TinkerCat = open(emptyMap())
+        /**
+         * Primary factory function — creates a new TinkerCat with optional configuration.
+         *
+         * Calling `TinkerCat()` (via `invoke`) is the idiomatic way to create a graph
+         * when no configuration is needed; `TinkerCat.open()` remains the named factory
+         * for explicit, self-documenting call sites.
+         */
+        operator fun invoke(configuration: Map<String, Any?> = emptyMap()): TinkerCat =
+            TinkerCat(configuration)
 
-        /** Create a new TinkerCat instance with configuration. */
-        fun open(configuration: Map<String, Any?>): TinkerCat {
-            return TinkerCat(configuration)
-        }
+        /** Named factory — equivalent to `TinkerCat()`. */
+        fun open(): TinkerCat = TinkerCat(emptyMap())
+
+        /** Named factory with explicit configuration map. */
+        fun open(configuration: Map<String, Any?>): TinkerCat = TinkerCat(configuration)
     }
 
     /** TinkerCat-specific features implementation. */

@@ -8,16 +8,7 @@ See docs/project/changelog/task-2.2.2-advanced-indexing.adoc.
 
 import pytest
 
-try:
-    from tinkercat import TinkerCat
-    from tinkercat.structure import TinkerIndex, CompositeIndex, RangeIndex
-    INDEX_AVAILABLE = True
-except ImportError:
-    INDEX_AVAILABLE = False
-    from mocks import MockGraph as TinkerCat
-
-from mocks import MockGraph
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Minimal index stubs used when real bindings are absent
@@ -33,7 +24,6 @@ class ExactIndex:
 
     def lookup(self, value):
         return self._data.get(value, [])
-
 
 class RangeIndexStub:
     """Sorted-list based range index."""
@@ -60,7 +50,6 @@ class RangeIndexStub:
             result.append(elem)
         return result
 
-
 class CompositeIndexStub:
     """Two-key composite index."""
     def __init__(self):
@@ -72,14 +61,13 @@ class CompositeIndexStub:
     def lookup(self, v1, v2):
         return self._data.get((v1, v2), [])
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 def test_exact_index_lookup():
     idx = ExactIndex()
-    g = MockGraph()
+    g = TinkerCat()
     alice = g.add_vertex("person", name="Alice")
     bob   = g.add_vertex("person", name="Bob")
     idx.add("Alice", alice)
@@ -87,16 +75,15 @@ def test_exact_index_lookup():
     result = idx.lookup("Alice")
     assert len(result) == 1
     assert result[0].id == alice.id
-
+    g.close()
 
 def test_exact_index_no_match_returns_empty():
     idx = ExactIndex()
     assert idx.lookup("Missing") == []
 
-
 def test_exact_index_multiple_matches():
     idx = ExactIndex()
-    g = MockGraph()
+    g = TinkerCat()
     a = g.add_vertex("person", city="NYC")
     b = g.add_vertex("person", city="NYC")
     c = g.add_vertex("person", city="LA")
@@ -104,22 +91,22 @@ def test_exact_index_multiple_matches():
     idx.add("NYC", b)
     idx.add("LA",  c)
     assert len(idx.lookup("NYC")) == 2
-
+    g.close()
 
 def test_range_index_gte():
     idx = RangeIndexStub()
-    g = MockGraph()
+    g = TinkerCat()
     verts = [g.add_vertex("person", age=a) for a in [20, 30, 40, 50]]
     for v in verts:
         idx.add(v.value("age"), v)
     result = idx.range_lookup(lo=30, lo_inc=True)
     ages = {e.value("age") for e in result}
     assert ages == {30, 40, 50}
-
+    g.close()
 
 def test_range_index_exclusive_lower_bound():
     idx = RangeIndexStub()
-    g = MockGraph()
+    g = TinkerCat()
     for age in [10, 20, 30]:
         v = g.add_vertex("p", age=age)
         idx.add(age, v)
@@ -127,22 +114,22 @@ def test_range_index_exclusive_lower_bound():
     ages = {e.value("age") for e in result}
     assert 20 not in ages
     assert 30 in ages
-
+    g.close()
 
 def test_range_index_between():
     idx = RangeIndexStub()
-    g = MockGraph()
+    g = TinkerCat()
     for age in range(10, 60, 10):
         v = g.add_vertex("p", age=age)
         idx.add(age, v)
     result = idx.range_lookup(lo=20, hi=40, lo_inc=True, hi_inc=True)
     ages = {e.value("age") for e in result}
     assert ages == {20, 30, 40}
-
+    g.close()
 
 def test_composite_index_lookup():
     idx = CompositeIndexStub()
-    g = MockGraph()
+    g = TinkerCat()
     alice = g.add_vertex("person", country="US", city="NYC")
     bob   = g.add_vertex("person", country="US", city="LA")
     carol = g.add_vertex("person", country="CA", city="Toronto")
@@ -152,12 +139,11 @@ def test_composite_index_lookup():
     result = idx.lookup("US", "NYC")
     assert len(result) == 1
     assert result[0].id == alice.id
-
+    g.close()
 
 def test_composite_index_no_match():
     idx = CompositeIndexStub()
     assert idx.lookup("XX", "YY") == []
-
 
 class LRUCache:
     def __init__(self, capacity):
@@ -184,7 +170,6 @@ class LRUCache:
     def __len__(self):
         return len(self._data)
 
-
 def test_lru_cache_evicts_oldest():
     cache = LRUCache(capacity=2)
     cache.put("a", 1)
@@ -193,7 +178,6 @@ def test_lru_cache_evicts_oldest():
     assert cache.get("a") is None
     assert cache.get("b") == 2
     assert cache.get("c") == 3
-
 
 def test_lru_cache_hit_refreshes_order():
     cache = LRUCache(capacity=2)

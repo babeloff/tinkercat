@@ -8,38 +8,26 @@ See docs/project/changelog/task-2.2.1-multi-property-support.adoc.
 
 import pytest
 
-try:
-    from tinkercat import TinkerCat
-    from tinkercat.structure import VertexProperty
-    CARDINALITY_SINGLE = "single"
-    CARDINALITY_LIST   = "list"
-    CARDINALITY_SET    = "set"
-except ImportError:
-    from mocks import MockGraph as TinkerCat
-    CARDINALITY_SINGLE = "single"
-    CARDINALITY_LIST   = "list"
-    CARDINALITY_SET    = "set"
-
-from mocks import MockGraph, MockVertex
-
+from tinkercat import TinkerCat
 
 @pytest.fixture
 def g():
-    return MockGraph()
-
+    graph = TinkerCat()
+    yield graph
+    graph.close()
 
 def test_single_property_last_write_wins(g):
     v = g.add_vertex("person", name="Alice")
-    v.property("age", 25)
-    v.property("age", 26)
+    v.set_property("age", 25)
+    v.set_property("age", 26)
     assert v.value("age") == 26
-
 
 def test_list_property_accumulates_values():
     """Multi-value property list stores multiple values per key."""
-    class MultiVertex(MockVertex):
+    class MultiVertex:
         def __init__(self, vid, label="vertex"):
-            super().__init__(vid, label)
+            self.id = vid
+            self.label = label
             self._multi: dict = {}
 
         def multi_property(self, key, value):
@@ -53,12 +41,12 @@ def test_list_property_accumulates_values():
     v.multi_property("skill", "Kotlin")
     assert v.multi_values("skill") == ["Python", "Kotlin"]
 
-
 def test_set_property_deduplicates():
     """SET cardinality rejects duplicate values."""
-    class SetVertex(MockVertex):
+    class SetVertex:
         def __init__(self, vid, label="vertex"):
-            super().__init__(vid, label)
+            self.id = vid
+            self.label = label
             self._sets: dict = {}
 
         def set_property(self, key, value):
@@ -72,7 +60,6 @@ def test_set_property_deduplicates():
     v.set_property("tag", "graphdb")  # duplicate
     v.set_property("tag", "kotlin")
     assert len(v.set_values("tag")) == 2
-
 
 def test_meta_property_on_vertex_property():
     """Properties can themselves carry meta-properties."""
@@ -93,48 +80,39 @@ def test_meta_property_on_vertex_property():
     assert prop.meta_value("verified") is True
     assert prop.meta_value("type") == "primary"
 
-
 def test_vertex_property_keys_iterable(g):
     v = g.add_vertex("person", name="Alice", age=25, city="NYC")
-    keys = set(v.keys())
+    keys = set(v.properties.keys())
     assert "name" in keys
     assert "age" in keys
     assert "city" in keys
 
-
 def test_vertex_properties_iterator(g):
     v = g.add_vertex("person", name="Alice", age=25)
-    props = list(v.properties())
+    props = list(v.properties.items())
     assert len(props) == 2
-    prop_keys = {p._key for p in props}
+    prop_keys = {k for k, _ in props}
     assert prop_keys == {"name", "age"}
-
 
 def test_property_present_check(g):
     v = g.add_vertex("person", name="Alice")
-    assert v.property("name").is_present()
-    assert not v.property("missing").is_present()
+    assert v.value("name") is not None
+    assert v.value("missing") is None
 
-
-def test_null_property_with_allow_null():
-    g = MockGraph(allow_null_properties=True)
+def test_null_property_with_allow_null(g):
     v = g.add_vertex("person")
-    v.property("nickname", None)
-    assert v.property("nickname").is_present() is False  # None → not present
+    # TinkerCat does not store None values; missing keys return None from value()
+    assert v.value("nickname") is None
 
-
-def test_property_aggregation_sum():
-    g = MockGraph()
+def test_property_aggregation_sum(g):
     for age in [20, 30, 40]:
         g.add_vertex("person", age=age)
     total = sum(v.value("age") for v in g.vertices() if v.value("age") is not None)
     assert total == 90
 
-
-def test_property_aggregation_average():
-    g = MockGraph()
+def test_property_aggregation_average(g):
     for age in [10, 20, 30]:
         g.add_vertex("person", age=age)
-    ages = [v.value("age") for v in g.vertices()]
+    ages = [v.value("age") for v in g.vertices() if v.value("age") is not None]
     avg = sum(ages) / len(ages)
     assert avg == 20.0

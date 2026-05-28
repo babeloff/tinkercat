@@ -8,8 +8,7 @@ See docs/project/changelog/task-7.5.1-step-strategy.adoc.
 
 import pytest
 
-from mocks import MockGraph, MockVertex
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Mock strategy and graph-step with index awareness
@@ -23,7 +22,6 @@ class HasContainer:
     def test(self, element):
         return self.predicate(element.value(self.key))
 
-
 class ExactIndex:
     def __init__(self):
         self._data: dict = {}
@@ -36,7 +34,6 @@ class ExactIndex:
 
     def __contains__(self, value):
         return value in self._data
-
 
 class IndexedGraphStep:
     """Simulates a GraphStep that can use an index when available."""
@@ -75,18 +72,17 @@ class IndexedGraphStep:
             result = [v for v in result if hc.test(v)]
         return result
 
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def g():
-    graph = MockGraph()
+    graph = TinkerCat()
     for name, age in [("Alice", 25), ("Bob", 30), ("Carol", 35), ("Dave", 40)]:
         graph.add_vertex("person", name=name, age=age)
-    return graph
-
+    yield graph
+    graph.close()
 
 def test_step_without_index_returns_correct_results(g):
     step = IndexedGraphStep(g)
@@ -94,7 +90,6 @@ def test_step_without_index_returns_correct_results(g):
     result = step.execute()
     assert len(result) == 1
     assert result[0].value("name") == "Alice"
-
 
 def test_step_with_index_returns_same_results(g):
     idx = ExactIndex()
@@ -108,7 +103,6 @@ def test_step_with_index_returns_same_results(g):
     assert len(result) == 1
     assert result[0].value("name") == "Bob"
 
-
 def test_step_range_predicate_falls_back_to_scan(g):
     step = IndexedGraphStep(g)
     step.add_has_container(HasContainer("age", lambda v: v is not None and v >= 30))
@@ -117,12 +111,10 @@ def test_step_range_predicate_falls_back_to_scan(g):
     assert names == {"Bob", "Carol", "Dave"}
     assert step._scan_count == 1
 
-
 def test_no_has_containers_returns_all(g):
     step = IndexedGraphStep(g)
     result = step.execute()
     assert len(result) == g.vertex_count
-
 
 def test_multiple_has_containers_all_must_match(g):
     step = IndexedGraphStep(g)
@@ -132,20 +124,21 @@ def test_multiple_has_containers_all_must_match(g):
     assert len(result) == 1
     assert result[0].value("name") == "Bob"
 
-
 def test_label_push_down():
-    g = MockGraph()
-    for _ in range(3):
-        g.add_vertex("person")
-    for _ in range(2):
-        g.add_vertex("software")
+    g = TinkerCat()
+    try:
+        for _ in range(3):
+            g.add_vertex("person")
+        for _ in range(2):
+            g.add_vertex("software")
 
-    step = IndexedGraphStep(g)
-    step.add_has_container(HasContainer("label", lambda v: v == "person"))
-    # Override: test against element label directly
-    result = [v for v in g.vertices() if v.label == "person"]
-    assert len(result) == 3
-
+        step = IndexedGraphStep(g)
+        step.add_has_container(HasContainer("label", lambda v: v == "person"))
+        # Override: test against element label directly
+        result = [v for v in g.vertices() if v.label == "person"]
+        assert len(result) == 3
+    finally:
+        g.close()
 
 def test_no_match_returns_empty(g):
     step = IndexedGraphStep(g)

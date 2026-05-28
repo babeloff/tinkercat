@@ -10,8 +10,7 @@ import pytest
 import threading
 import time
 
-from mocks import MockGraph
-
+from tinkercat import TinkerCat
 
 # ---------------------------------------------------------------------------
 # Mock memory pool
@@ -39,13 +38,11 @@ class MockMemoryPool:
     def free(self):
         return self.capacity - self._used
 
-
 def test_pool_allocate_within_capacity():
     pool = MockMemoryPool(1024)
     buf = pool.allocate(256)
     assert len(buf) == 256
     assert pool.free == 768
-
 
 def test_pool_exhaustion_raises():
     pool = MockMemoryPool(100)
@@ -53,20 +50,17 @@ def test_pool_exhaustion_raises():
     with pytest.raises(MemoryError):
         pool.allocate(20)
 
-
 def test_pool_reset_restores_capacity():
     pool = MockMemoryPool(512)
     pool.allocate(256)
     pool.reset()
     assert pool.free == 512
 
-
 def test_pool_multiple_allocations():
     pool = MockMemoryPool(1024)
     for size in [128, 256, 64]:
         pool.allocate(size)
     assert pool.free == 1024 - 448
-
 
 # ---------------------------------------------------------------------------
 # Work-stealing queue simulation
@@ -93,14 +87,12 @@ class WorkQueue:
             with self._lock:
                 self._results.append(result)
 
-
 def test_work_queue_executes_all_tasks():
     q = WorkQueue()
     for i in range(10):
         q.submit(lambda x: x * 2, i)
     q.run_all()
     assert len(q._results) == 10
-
 
 def test_work_queue_results_are_correct():
     q = WorkQueue()
@@ -109,24 +101,28 @@ def test_work_queue_results_are_correct():
     q.run_all()
     assert sorted(q._results) == [1, 2, 3, 4, 5]
 
-
 # ---------------------------------------------------------------------------
 # Bulk graph operation performance (regression guard)
 # ---------------------------------------------------------------------------
 
 def test_bulk_insert_10k_vertices():
-    g = MockGraph()
-    start = time.monotonic()
-    for i in range(10_000):
-        g.add_vertex("node", idx=i)
-    elapsed = time.monotonic() - start
-    assert g.vertex_count == 10_000
-    assert elapsed < 10.0, f"10K inserts took {elapsed:.2f}s"
-
+    g = TinkerCat()
+    try:
+        start = time.monotonic()
+        for i in range(10_000):
+            g.add_vertex("node", idx=i)
+        elapsed = time.monotonic() - start
+        assert g.vertex_count == 10_000
+        assert elapsed < 10.0, f"10K inserts took {elapsed:.2f}s"
+    finally:
+        g.close()
 
 def test_bulk_edge_creation():
-    g = MockGraph()
-    verts = [g.add_vertex("n") for _ in range(100)]
-    for i in range(len(verts) - 1):
-        g.add_edge("link", verts[i], verts[i + 1])
-    assert g.edge_count == 99
+    g = TinkerCat()
+    try:
+        verts = [g.add_vertex("n") for _ in range(100)]
+        for i in range(len(verts) - 1):
+            g.add_edge("link", verts[i], verts[i + 1])
+        assert g.edge_count == 99
+    finally:
+        g.close()
