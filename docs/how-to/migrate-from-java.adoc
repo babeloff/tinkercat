@@ -1,4 +1,4 @@
-= Migration Guide: From Java TinkerCat to TinkerCat
+= Migration Guide: From Java TinkerGraph to TinkerCat
 :toc: left
 :toclevels: 3
 :sectnums:
@@ -7,7 +7,7 @@
 
 == Overview
 
-This guide shows you how to migrate an existing project from the Java TinkerCat implementation to TinkerCat.
+This guide shows you how to migrate an existing project from the Java https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/main/java/org/apache/tinkerpop/gremlin/tinkergraph[TinkerGraph implementation] to TinkerCat.
 Follow the steps in order — each section tackles a concrete migration task.
 For background on why TinkerCat works the way it does see the xref:../explanation/[Explanation pages].
 For a complete API listing see the xref:../reference/api.adoc[API Reference].
@@ -18,7 +18,7 @@ For a complete API listing see the xref:../reference/api.adoc[API Reference].
 
 [cols="2,3,3", options="header"]
 |===
-|Aspect |Java TinkerCat |TinkerCat
+|Aspect |Java TinkerGraph |TinkerCat
 
 |Language
 |Java only
@@ -50,15 +50,15 @@ For a complete API listing see the xref:../reference/api.adoc[API Reference].
 === Step 1: Update Dependencies
 
 ==== Maven
-Replace your existing TinkerCat dependency:
+Replace your existing TinkerGraph dependency:
 
 [source,xml]
 ----
-<!-- OLD: Java TinkerCat -->
+<!-- OLD: Java TinkerGraph -->
 <dependency>
     <groupId>org.apache.tinkerpop</groupId>
-    <artifactId>tinkercat-gremlin</artifactId>
-    <version>3.7.0</version>
+    <artifactId>tinkergraph-gremlin</artifactId>
+    <version>3.8.0</version>
 </dependency>
 
 <!-- NEW: TinkerCat -->
@@ -73,7 +73,7 @@ Replace your existing TinkerCat dependency:
 [source,kotlin]
 ----
 // OLD
-implementation("org.apache.tinkerpop:tinkercat-gremlin:3.7.0")
+implementation("org.apache.tinkerpop:tinkergraph-gremlin:3.8.0")
 
 // NEW
 implementation("org.apache.tinkerpop:tinkercat:1.0.0")
@@ -83,10 +83,10 @@ implementation("org.apache.tinkerpop:tinkercat:1.0.0")
 
 [source,java]
 ----
-// OLD Java imports
-import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat;
-import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerVertex;
-import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerEdge;
+// OLD Java imports (TinkerGraph)
+import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerGraph;
+import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerVertex;
+import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerEdge;
 ----
 
 [source,kotlin]
@@ -103,8 +103,8 @@ import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerEdge
 
 [source,java]
 ----
-// OLD Java code
-TinkerCat graph = TinkerCat.open();
+// OLD Java code (TinkerGraph)
+TinkerGraph graph = TinkerGraph.open();
 Vertex alice = graph.addVertex(T.label, "person", "name", "Alice", "age", 30);
 Vertex bob = graph.addVertex(T.label, "person", "name", "Bob", "age", 25);
 Edge knows = alice.addEdge("knows", bob, "since", "2020");
@@ -157,14 +157,14 @@ val names = graph.traversal()
 
 [source,java]
 ----
-// OLD Java configuration
+// OLD Java configuration (TinkerGraph)
 Map<String, Object> config = new HashMap<>();
-config.put(TinkerCat.GREMLIN_TINKERCAT_VERTEX_ID_MANAGER,
-           TinkerCat.DefaultIdManager.UUID.name());
-config.put(TinkerCat.GREMLIN_TINKERCAT_EDGE_ID_MANAGER,
-           TinkerCat.DefaultIdManager.UUID.name());
+config.put(TinkerGraph.GREMLIN_TINKERGRAPH_VERTEX_ID_MANAGER,
+           TinkerGraph.DefaultIdManager.UUID.name());
+config.put(TinkerGraph.GREMLIN_TINKERGRAPH_EDGE_ID_MANAGER,
+           TinkerGraph.DefaultIdManager.UUID.name());
 
-TinkerCat graph = TinkerCat.open(config);
+TinkerGraph graph = TinkerGraph.open(config);
 ----
 
 [source,kotlin]
@@ -188,7 +188,7 @@ val graph = TinkerCat.open(config)
 
 === Advanced Indexing
 
-==== Before (Java TinkerCat)
+==== Before (Java TinkerGraph)
 [source,java]
 ----
 // Limited indexing capabilities
@@ -210,7 +210,7 @@ println("Index efficiency: ${stats.averageHitRatio}")
 
 === Concurrent Access
 
-==== Before (Java TinkerCat)
+==== Before (Java TinkerGraph)
 [source,java]
 ----
 // Manual synchronization required
@@ -242,7 +242,7 @@ graph.tx().use { tx ->
 
 === Performance Monitoring
 
-==== Before (Java TinkerCat)
+==== Before (Java TinkerGraph)
 [source,java]
 ----
 // Manual performance tracking
@@ -388,7 +388,7 @@ val ageWithDefault = vertex.property("age").orElse(0) as Int
 
 [cols="3,2,2,2", options="header"]
 |===
-|Operation |Java TinkerCat |TinkerCat |Improvement
+|Operation |Java TinkerGraph |TinkerCat |Improvement
 
 |Vertex Creation (1M vertices)
 |2.5 seconds
@@ -469,7 +469,7 @@ class GraphMigrationTest : StringSpec({
 // Enhanced integration testing
 class GraphIntegrationTest : StringSpec({
     "migration compatibility test" {
-        // Test data from Java TinkerCat format
+        // Test data from Java TinkerGraph format
         val javaGraphData = loadJavaGraphData("test-data.json")
 
         // Import into TinkerCat
@@ -602,12 +602,12 @@ if (memStats.memoryPressure) {
 ```kotlin
 // Migration utility functions
 object MigrationUtils {
-    fun validateMigration(originalGraph: JavaTinkerCat, newGraph: TinkerCat): ValidationResult {
+    fun validateMigration(originalGraph: TinkerGraph, newGraph: TinkerCat): ValidationResult {
         // Compare graph structure and data
     }
 
-    fun exportJavaGraph(graph: JavaTinkerCat): GraphData {
-        // Export Java TinkerCat data
+    fun exportJavaGraph(graph: TinkerGraph): GraphData {
+        // Export Java TinkerGraph data
     }
 
     fun importToTinkerCat(data: GraphData): TinkerCat {
@@ -618,7 +618,7 @@ object MigrationUtils {
 
 == Conclusion
 
-Migrating from Java TinkerCat to TinkerCat provides significant benefits:
+Migrating from Java TinkerGraph to TinkerCat provides significant benefits:
 
 - **Performance**: 35-60% improvement in most operations
 - **Features**: Advanced indexing, concurrent access, cross-platform support

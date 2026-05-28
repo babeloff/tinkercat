@@ -22,7 +22,7 @@ The conceptual mapping from Gremlin step notation to idiomatic Kotlin is shown t
 [NOTE]
 ====
 If you are migrating an existing project from the Java TinkerGraph implementation, see
-xref:../how-to/migrate-from-java.adoc[Migrate from Java TinkerCat] for a step-by-step guide.
+xref:../how-to/migrate-from-java.adoc[Migrate from Java TinkerGraph] for a step-by-step guide.
 ====
 
 == Opening a Graph

@@ -11,7 +11,7 @@ image:https://img.shields.io/badge/status-alpha-yellow.svg[Status]
 
 == Overview
 
-TinkerCat Kotlin Multiplatform is a complete reimplementation of Apache TinkerPop's TinkerCat in-memory graph database using Kotlin Multiplatform. This implementation provides native support for JVM, JavaScript (Node.js/Browser), and Native platforms while maintaining full API compatibility with the original Java implementation.
+TinkerCat Kotlin Multiplatform is a complete reimplementation of Apache TinkerPop's https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/main/java/org/apache/tinkerpop/gremlin/tinkergraph[TinkerGraph] in-memory graph database using Kotlin Multiplatform. This implementation provides native support for JVM, JavaScript (Node.js/Browser), and Native platforms while maintaining full API compatibility with the original Java implementation.
 
 == Features
 
@@ -347,6 +347,7 @@ Licensed under the Apache License, Version 2.0. See link:LICENSE[LICENSE] for de
 * **Provenance**: link:docs/provenance.adoc[Source Material References]
 * **Changelog**: link:docs/changelog/[Release Notes]
 * **Apache TinkerPop**: https://tinkerpop.apache.org/
+* **TinkerGraph (reference implementation)**: https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/main/java/org/apache/tinkerpop/gremlin/tinkergraph
 * **Kotlin Multiplatform**: https://kotlinlang.org/docs/multiplatform.html
 
 == Support

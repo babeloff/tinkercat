@@ -25,7 +25,7 @@ Tutorials take you step-by-step through a complete task so you build real unders
 Already know the basics and need to accomplish something concrete?
 How-to guides focus on the goal, not the background.
 
-* xref:how-to/migrate-from-java.adoc[Migrate from Java TinkerCat] — port an existing project to TinkerCat.
+* xref:how-to/migrate-from-java.adoc[Migrate from Java TinkerGraph] — port an existing project to TinkerCat.
 
 == Reference — technical descriptions
 

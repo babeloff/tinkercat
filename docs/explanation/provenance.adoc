@@ -12,34 +12,34 @@ If you want to understand a specific design decision in depth see the other xref
 
 == Primary Source Materials
 
-=== Apache TinkerPop TinkerCat (Java)
+=== Apache TinkerPop TinkerGraph (Java)
 
 **Primary Reference Implementation**
 
 * *Repository*: https://github.com/apache/tinkerpop
-* *Specific Path*: `/tinkercat-gremlin/src/main/java/org/apache/tinkerpop/gremlin/tinkercat/`
-* *Reference Documentation*: https://tinkerpop.apache.org/docs/current/reference/#tinkercat-gremlin
+* *Specific Path*: https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/main/java/org/apache/tinkerpop/gremlin/tinkergraph
+* *Reference Documentation*: https://tinkerpop.apache.org/docs/current/reference/#tinkergraph-gremlin
 * *License*: Apache License 2.0
-* *Version Referenced*: 3.7.x branch
+* *Version Referenced*: 3.8.x branch (master branch)
 * *Authors*: Apache TinkerPop Community
-* *Description*: The canonical Java implementation of TinkerCat, serving as the reference for API compatibility and behavior.
+* *Description*: The canonical Java in-memory graph implementation, and the reference for TinkerCat's API compatibility and behavior.
 
 **Key Components Referenced:**
 
-* `TinkerCat.java` - Main graph implementation
-* `TinkerVertex.java` - Vertex implementation
-* `TinkerEdge.java` - Edge implementation
-* `TinkerElement.java` - Base element class
-* `TinkerVertexProperty.java` - Vertex property implementation
-* `TinkerIndex.java` - Indexing system
-* `TinkerHelper.java` - Utility methods
-* `TinkerCatVariables.java` - Graph variables implementation
+* `structure/TinkerGraph.java` - Main graph implementation
+* `structure/TinkerVertex.java` - Vertex implementation
+* `structure/TinkerEdge.java` - Edge implementation
+* `structure/TinkerElement.java` - Base element class
+* `structure/TinkerVertexProperty.java` - Vertex property implementation
+* `structure/TinkerIndex.java` - Indexing system
+* `structure/TinkerHelper.java` - Utility methods
+* `structure/TinkerGraphVariables.java` - Graph variables implementation
 
 **Documentation:**
 
 * *API Documentation*: https://tinkerpop.apache.org/javadocs/current/full/
 * *User Guide*: https://tinkerpop.apache.org/docs/current/reference/
-* *TinkerCat Specific*: https://tinkerpop.apache.org/docs/current/reference/#tinkercat-gremlin
+* *TinkerGraph Specific*: https://tinkerpop.apache.org/docs/current/reference/#tinkergraph-gremlin
 
 === TinkerCat JavaScript Implementation
 
@@ -175,7 +175,7 @@ If you want to understand a specific design decision in depth see the other xref
 **Test Organization**
 
 * *Source*: Apache TinkerPop test suites
-* *Path*: `/tinkercat-gremlin/src/test/java/`
+* *Path*: https://github.com/apache/tinkerpop/tree/master/tinkergraph-gremlin/src/test/java/org/apache/tinkerpop/gremlin/tinkergraph
 * *Purpose*: Ensuring comprehensive test coverage and compatibility validation
 
 === Property-Based Testing
@@ -254,7 +254,7 @@ All files derived from or inspired by the referenced materials will include appr
 
 ----
 /*
- * Based on Apache TinkerPop TinkerCat implementation
+ * Based on Apache TinkerPop TinkerGraph implementation
  * Original work: Copyright (c) Apache Software Foundation
  *
  * Kotlin Multiplatform implementation
@@ -289,7 +289,7 @@ This implementation acknowledges:
 This implementation is a derivative work based on:
 
 1. **Structural derivation** from Apache TinkerPop interfaces
-2. **Behavioral compatibility** with Java TinkerCat implementation
+2. **Behavioral compatibility** with Java TinkerGraph implementation
 3. **Pattern inspiration** from JavaScript implementations
 4. **Platform adaptation** for Kotlin Multiplatform
 
