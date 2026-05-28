@@ -21,11 +21,16 @@ fun readGraph(data: ByteArray): TinkerCat {
 
 /**
  * Serialises a single scalar [value] (Int, Long, Float, Double, Boolean, String) to
- * GraphBinary bytes. Throws [IllegalArgumentException] for unsupported types (once implemented).
- * Not yet implemented.
+ * GraphBinary bytes. Throws [IllegalArgumentException] for unsupported types.
+ * Serialisation itself is not yet implemented (task 7.6.1).
  */
-fun writeValue(value: Any?): ByteArray {
-    throw UnsupportedOperationException("GraphBinary writeValue() not yet implemented (task 7.6.1)")
+fun writeValue(value: Any?): ByteArray = when (value) {
+    is Int, is Long, is Float, is Double, is Boolean, is String ->
+        throw UnsupportedOperationException("GraphBinary writeValue() not yet implemented (task 7.6.1)")
+    else ->
+        throw IllegalArgumentException(
+            "Unsupported type for GraphBinary serialization: ${value?.let { it::class.simpleName } ?: "null"}"
+        )
 }
 
 /** Deserialises a single scalar value from GraphBinary bytes. Not yet implemented. */

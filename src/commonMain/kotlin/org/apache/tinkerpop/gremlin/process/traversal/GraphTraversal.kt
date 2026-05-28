@@ -1,5 +1,10 @@
 package org.apache.tinkerpop.gremlin.process.traversal
 
+import kotlinx.datetime.Instant
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import org.apache.tinkerpop.gremlin.structure.*
 
 /**
@@ -317,115 +322,134 @@ class GraphTraversal<S, E> internal constructor(
         throw UnsupportedOperationException("property() mutation step not yet implemented (task 7.4.6)")
     }
 
-    /**
-     * Drains and discards all traversal results. Analogous to Python's `discard()`.
-     * Not yet implemented (task 7.4.6); use [iterate] in the meantime.
-     */
-    fun discard() {
-        throw UnsupportedOperationException("discard() step not yet implemented (task 7.4.6)")
-    }
+    /** Drains and discards all traversal results. Terminal step — mirrors TinkerPop's DiscardStep. */
+    fun discard() { seq.forEach { } }
 
     // ══════════════════════════════════════════════════════════════════════════
     // String manipulation steps (task 7.4.2)
     // ══════════════════════════════════════════════════════════════════════════
 
-    /** Appends each of [others] to the current string element. Not yet implemented. */
-    fun concat(vararg others: String): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("concat() string step not yet implemented (task 7.4.2)")
-    }
+    /** Appends each of [others] to the current string element. */
+    fun concat(vararg others: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String) + others.joinToString("") })
 
     /**
-     * Formats the current string element using [template] (%s or %{token} placeholders).
-     * Not yet implemented.
+     * Formats the current element using [template].
+     * `%s` is replaced with the element's string representation.
+     * `%{token}` placeholders resolve to empty string (full by()-modulation not implemented).
      */
-    fun format(template: String): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("format() string step not yet implemented (task 7.4.2)")
-    }
+    fun format(template: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { elem ->
+            template.replace("%s", elem.toString()).replace(Regex("%\\{[^}]*\\}"), "")
+        })
 
-    /** Converts the current string element to lower-case. Not yet implemented. */
-    fun toLower(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("toLower() string step not yet implemented (task 7.4.2)")
-    }
+    /** Converts the current string element to lower-case. */
+    fun toLower(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).lowercase() })
 
-    /** Converts the current string element to upper-case. Not yet implemented. */
-    fun toUpper(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("toUpper() string step not yet implemented (task 7.4.2)")
-    }
+    /** Converts the current string element to upper-case. */
+    fun toUpper(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).uppercase() })
 
-    /** Strips leading and trailing whitespace from the current string element. Not yet implemented. */
-    fun trim(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("trim() string step not yet implemented (task 7.4.2)")
-    }
+    /** Strips leading and trailing whitespace from the current string element. */
+    fun trim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trim() })
 
-    /** Strips leading whitespace from the current string element. Not yet implemented. */
-    fun ltrim(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("ltrim() string step not yet implemented (task 7.4.2)")
-    }
+    /** Strips leading whitespace from the current string element. */
+    fun ltrim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trimStart() })
 
-    /** Strips trailing whitespace from the current string element. Not yet implemented. */
-    fun rtrim(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("rtrim() string step not yet implemented (task 7.4.2)")
-    }
+    /** Strips trailing whitespace from the current string element. */
+    fun rtrim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trimEnd() })
 
-    /** Replaces occurrences of [pattern] with [replacement] in the current string element. Not yet implemented. */
-    fun replace(pattern: String, replacement: String): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("replace() string step not yet implemented (task 7.4.2)")
-    }
+    /** Replaces occurrences of [pattern] with [replacement] in the current string element. */
+    fun replace(pattern: String, replacement: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).replace(pattern, replacement) })
 
     /**
-     * Splits the current string element on [delimiter], emitting the resulting tokens as
-     * separate traversal elements. Not yet implemented.
+     * Splits the current string element on [delimiter], emitting each token as a separate
+     * traversal element (flatMap semantics).
      */
-    fun split(delimiter: String): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("split() string step not yet implemented (task 7.4.2)")
-    }
+    fun split(delimiter: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.flatMap { (it as String).split(delimiter).asSequence() })
 
-    /** Emits the character-length of the current string element. Not yet implemented. */
-    fun length(): GraphTraversal<S, Int> {
-        throw UnsupportedOperationException("length() string step not yet implemented (task 7.4.2)")
-    }
+    /** Emits the character-length of the current string element. */
+    fun length(): GraphTraversal<S, Int> =
+        GraphTraversal(seq.map { (it as String).length })
 
     /**
-     * Returns the substring of the current string element from [start] (inclusive) to
-     * [end] (exclusive). Omit [end] or pass -1 to take everything from [start]. Not yet implemented.
+     * Returns the substring from [start] (inclusive) to [end] (exclusive).
+     * Pass -1 (default) to take everything from [start] to the end.
      */
-    fun substring(start: Int, end: Int = -1): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("substring() string step not yet implemented (task 7.4.2)")
-    }
+    fun substring(start: Int, end: Int = -1): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { elem ->
+            val s = elem as String
+            val len = s.length
+            val from = start.coerceIn(0, len)
+            if (end < 0) s.substring(from) else s.substring(from, end.coerceIn(from, len))
+        })
 
-    /** Reverses the current string element. Not yet implemented. */
-    fun reverse(): GraphTraversal<S, String> {
-        throw UnsupportedOperationException("reverse() string step not yet implemented (task 7.4.2)")
-    }
+    /** Reverses the current string element. */
+    fun reverse(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).reversed() })
 
     // ══════════════════════════════════════════════════════════════════════════
     // Date / time steps (task 7.4.3)
     // ══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Coerces the current element to a date/time value.
-     * Accepts epoch-milliseconds (Long), ISO-8601 strings, or native date objects.
-     * Not yet implemented.
+     * Coerces the current element to [Instant].
+     * Accepts epoch-milliseconds (Long), ISO-8601 strings, or an existing [Instant].
+     * Any other type throws [IllegalArgumentException].
      */
-    fun asDate(): GraphTraversal<S, Any> {
-        throw UnsupportedOperationException("asDate() step not yet implemented (task 7.4.3)")
-    }
+    fun asDate(): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
+        when (elem) {
+            is Long    -> Instant.fromEpochMilliseconds(elem)
+            is String  -> Instant.parse(elem)
+            is Instant -> elem
+            else -> throw IllegalArgumentException("Cannot convert $elem to a date")
+        }
+    })
 
     /**
-     * Adds [amount] of the given time [unit] ("DAYS", "HOURS", "MINUTES", "SECONDS", …)
-     * to the current date element. Not yet implemented.
+     * Adds [amount] of the given time [unit] to the current [Instant] element.
+     * Supported units (case-insensitive): "DAYS", "HOURS", "MINUTES", "SECONDS".
      */
-    fun dateAdd(unit: String, amount: Int): GraphTraversal<S, Any> {
-        throw UnsupportedOperationException("dateAdd() step not yet implemented (task 7.4.3)")
-    }
+    fun dateAdd(unit: String, amount: Int): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
+        val inst = elem as Instant
+        val duration = when (unit.uppercase()) {
+            "DAYS"    -> amount.days
+            "HOURS"   -> amount.hours
+            "MINUTES" -> amount.minutes
+            "SECONDS" -> amount.seconds
+            else -> throw IllegalArgumentException("Unknown time unit: $unit")
+        }
+        inst + duration
+    })
 
     /**
-     * Returns the difference in [unit] between the current date element and [reference].
-     * Not yet implemented.
+     * Returns the signed difference `[reference] − traverser` in the given [unit].
+     * Positive when [reference] is later than the traverser's date.
+     * Supported units (case-insensitive): "DAYS", "HOURS", "MINUTES", "SECONDS".
      */
-    fun dateDiff(reference: Any, unit: String): GraphTraversal<S, Long> {
-        throw UnsupportedOperationException("dateDiff() step not yet implemented (task 7.4.3)")
-    }
+    fun dateDiff(reference: Any, unit: String): GraphTraversal<S, Long> = GraphTraversal(seq.map { elem ->
+        val self = elem as Instant
+        val refInstant: Instant = when (reference) {
+            is Long    -> Instant.fromEpochMilliseconds(reference)
+            is String  -> Instant.parse(reference)
+            is Instant -> reference
+            else -> throw IllegalArgumentException("Cannot convert reference to a date")
+        }
+        val diff = refInstant - self
+        when (unit.uppercase()) {
+            "DAYS"    -> diff.inWholeDays
+            "HOURS"   -> diff.inWholeHours
+            "MINUTES" -> diff.inWholeMinutes
+            "SECONDS" -> diff.inWholeSeconds
+            else -> throw IllegalArgumentException("Unknown time unit: $unit")
+        }
+    })
 
     // ══════════════════════════════════════════════════════════════════════════
     // Service call step (task 7.4.5)

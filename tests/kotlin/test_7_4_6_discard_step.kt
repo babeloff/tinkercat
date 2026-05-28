@@ -49,10 +49,12 @@ class Test_7_4_6_DiscardStep : StringSpec({
         }
     }
 
-    "discard drains the pipeline" {
+    "discard makes the traversal non-reusable" {
         val t = graph.traversal().V()
         t.discard()
-        t.toList() shouldBe emptyList()
+        // Kotlin sequences wrapping a one-shot iterator throw on re-iteration
+        val caught = runCatching { t.toList() }.exceptionOrNull()
+        (caught is IllegalStateException) shouldBe true
     }
 
     "side effects execute before discard" {
