@@ -142,7 +142,7 @@ fun addEdgeWithProperties(
 fun getVertexCount(graphPtr: COpaquePointer?): Long {
     return try {
         val graph = graphPtr?.asStableRef<TinkerCat>()?.get() ?: return 0L
-        graph.vertices().asSequence().count().toLong()
+        graph.vertices.size.toLong()
     } catch (e: Exception) {
         0L
     }
@@ -152,7 +152,7 @@ fun getVertexCount(graphPtr: COpaquePointer?): Long {
 fun getEdgeCount(graphPtr: COpaquePointer?): Long {
     return try {
         val graph = graphPtr?.asStableRef<TinkerCat>()?.get() ?: return 0L
-        graph.edges().asSequence().count().toLong()
+        graph.edges.size.toLong()
     } catch (e: Exception) {
         0L
     }

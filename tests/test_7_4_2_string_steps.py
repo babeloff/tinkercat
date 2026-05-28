@@ -1,185 +1,151 @@
 """
 Tests for Task 7.4.2: String Manipulation Traversal Steps.
 
-Validates all twelve string steps: concat, format, toLower, toUpper,
-trim, ltrim, rtrim, replace, split, length, substring, and reverse.
+All tests call string steps (concat, toLower, toUpper, trim, replace,
+split, length, substring, reverse, format) on a live TinkerCat traversal.
+None of these steps are implemented yet; every test fails with
+AttributeError until they are added to TinkerCat's GraphTraversal.
 See docs/project/changelog/task-7.4.2-string-steps.adoc.
 """
 
 import pytest
-import re
+
+from tinkercat import TinkerCat
 
 
-# ---------------------------------------------------------------------------
-# Mock pipeline that applies string steps
-# ---------------------------------------------------------------------------
-
-class StringPipeline:
-    def __init__(self, values):
-        self._values = list(values)
-
-    def concat(self, *others):
-        self._values = [v + "".join(str(o) for o in others) for v in self._values]
-        return self
-
-    def format(self, template):
-        self._values = [template.replace("%s", v) for v in self._values]
-        return self
-
-    def format_tokens(self, template, element):
-        def replace(m):
-            key = m.group(1)
-            return str(element.get(key, ""))
-        self._values = [re.sub(r"%\{(\w+)}", replace, template)
-                        for _ in self._values]
-        return self
-
-    def to_lower(self):
-        self._values = [v.lower() for v in self._values]
-        return self
-
-    def to_upper(self):
-        self._values = [v.upper() for v in self._values]
-        return self
-
-    def trim(self):
-        self._values = [v.strip() for v in self._values]
-        return self
-
-    def ltrim(self):
-        self._values = [v.lstrip() for v in self._values]
-        return self
-
-    def rtrim(self):
-        self._values = [v.rstrip() for v in self._values]
-        return self
-
-    def replace(self, pattern, replacement):
-        self._values = [v.replace(pattern, replacement) for v in self._values]
-        return self
-
-    def split(self, delimiter):
-        result = []
-        for v in self._values:
-            result.extend(v.split(delimiter))
-        self._values = result
-        return self
-
-    def length(self):
-        self._values = [len(v) for v in self._values]
-        return self
-
-    def substring(self, start, end=None):
-        if end is None:
-            self._values = [v[start:] for v in self._values]
-        else:
-            self._values = [v[start:end] for v in self._values]
-        return self
-
-    def reverse(self):
-        self._values = [v[::-1] for v in self._values]
-        return self
-
-    def to_list(self):
-        return list(self._values)
+@pytest.fixture
+def g():
+    graph = TinkerCat()
+    graph.add_vertex("word", name="Hello")
+    graph.add_vertex("word", name="HELLO")
+    graph.add_vertex("word", name="hello")
+    graph.add_vertex("word", name="  hello  ")
+    graph.add_vertex("word", name="foo bar")
+    graph.add_vertex("word", name="a,b,c")
+    graph.add_vertex("word", name="a, b, c")
+    graph.add_vertex("word", name="HÉLLO")
+    graph.add_vertex("word", name="  alice@EXAMPLE.COM  ")
+    yield graph
+    graph.close()
 
 
-def P(values):
-    return StringPipeline(values)
+def test_concat(g):
+    result = g.traversal().V().has("name", "Hello").values("name").concat(", World").to_list()  # AttributeError
+    assert result == ["Hello, World"]
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-def test_concat():
-    assert P(["Hello"]).concat(", World").to_list() == ["Hello, World"]
+def test_concat_multiple(g):
+    result = g.traversal().V().has("name", "Hello").values("name").concat("b", "c").to_list()  # AttributeError
+    assert result == ["Hellobc"]
 
 
-def test_concat_multiple():
-    assert P(["a"]).concat("b", "c").to_list() == ["abc"]
+def test_format_percent_s(g):
+    result = g.traversal().V().has("name", "Hello").values("name").format("Hi, %s!").to_list()  # AttributeError
+    assert result == ["Hi, Hello!"]
 
 
-def test_format_percent_s():
-    assert P(["Alice"]).format("Hello, %s!").to_list() == ["Hello, Alice!"]
+def test_format_tokens(g):
+    result = g.traversal().V().has("name", "Hello").values("name").format("%{val}").to_list()  # AttributeError
+    assert isinstance(result, list)
 
 
-def test_format_tokens():
-    result = P(["unused"]).format_tokens(
-        "Hi %{name}, age %{age}!", {"name": "Alice", "age": "30"}
-    ).to_list()
-    assert result == ["Hi Alice, age 30!"]
-
-
-def test_format_missing_token_empty():
-    result = P(["x"]).format_tokens("%{missing}", {}).to_list()
+def test_format_missing_token_empty(g):
+    result = g.traversal().V().has("name", "Hello").values("name").format("%{missing}").to_list()  # AttributeError
     assert result == [""]
 
 
-def test_to_lower():
-    assert P(["HELLO"]).to_lower().to_list() == ["hello"]
+def test_to_lower(g):
+    result = g.traversal().V().has("name", "HELLO").values("name").to_lower().to_list()  # AttributeError
+    assert result == ["hello"]
 
 
-def test_to_upper():
-    assert P(["hello"]).to_upper().to_list() == ["HELLO"]
+def test_to_upper(g):
+    result = g.traversal().V().has("name", "hello").values("name").to_upper().to_list()  # AttributeError
+    assert result == ["HELLO"]
 
 
-def test_trim():
-    assert P(["  hello  "]).trim().to_list() == ["hello"]
+def test_trim(g):
+    result = g.traversal().V().has("name", "  hello  ").values("name").trim().to_list()  # AttributeError
+    assert result == ["hello"]
 
 
-def test_ltrim():
-    result = P(["  hello  "]).ltrim().to_list()[0]
-    assert result == "hello  "
+def test_ltrim(g):
+    result = g.traversal().V().has("name", "  hello  ").values("name").ltrim().to_list()  # AttributeError
+    assert result == ["hello  "]
 
 
-def test_rtrim():
-    result = P(["  hello  "]).rtrim().to_list()[0]
-    assert result == "  hello"
+def test_rtrim(g):
+    result = g.traversal().V().has("name", "  hello  ").values("name").rtrim().to_list()  # AttributeError
+    assert result == ["  hello"]
 
 
-def test_replace():
-    assert P(["foo bar"]).replace("bar", "baz").to_list() == ["foo baz"]
+def test_replace(g):
+    result = g.traversal().V().has("name", "foo bar").values("name").replace("bar", "baz").to_list()  # AttributeError
+    assert result == ["foo baz"]
 
 
-def test_split_delimiter():
-    result = P(["a,b,c"]).split(",").to_list()
+def test_split_delimiter(g):
+    result = g.traversal().V().has("name", "a,b,c").values("name").split(",").to_list()  # AttributeError
     assert result == ["a", "b", "c"]
 
 
-def test_split_then_trim():
-    result = P(["a, b, c"]).split(",").trim().to_list()
+def test_split_then_trim(g):
+    result = g.traversal().V().has("name", "a, b, c").values("name").split(",").trim().to_list()  # AttributeError
     assert result == ["a", "b", "c"]
 
 
-def test_length():
-    assert P(["hello"]).length().to_list() == [5]
+def test_length(g):
+    result = g.traversal().V().has("name", "hello").values("name").length().to_list()  # AttributeError
+    assert result == [5]
 
 
 def test_length_empty_string():
-    assert P([""]).length().to_list() == [0]
+    g = TinkerCat()
+    try:
+        g.add_vertex("w", name="")
+        result = g.traversal().V().values("name").length().to_list()  # AttributeError
+        assert result == [0]
+    finally:
+        g.close()
 
 
-def test_substring_start_only():
-    assert P(["hello"]).substring(2).to_list() == ["llo"]
+def test_substring_start_only(g):
+    result = g.traversal().V().has("name", "hello").values("name").substring(2).to_list()  # AttributeError
+    assert result == ["llo"]
 
 
-def test_substring_start_end():
-    assert P(["hello"]).substring(1, 4).to_list() == ["ell"]
+def test_substring_start_end(g):
+    result = g.traversal().V().has("name", "hello").values("name").substring(1, 4).to_list()  # AttributeError
+    assert result == ["ell"]
 
 
-def test_reverse():
-    assert P(["hello"]).reverse().to_list() == ["olleh"]
+def test_reverse(g):
+    result = g.traversal().V().has("name", "hello").values("name").reverse().to_list()  # AttributeError
+    assert result == ["olleh"]
 
 
 def test_reverse_empty():
-    assert P([""]).reverse().to_list() == [""]
+    g = TinkerCat()
+    try:
+        g.add_vertex("w", name="")
+        result = g.traversal().V().values("name").reverse().to_list()  # AttributeError
+        assert result == [""]
+    finally:
+        g.close()
 
 
-def test_unicode_to_lower():
-    assert P(["HÉLLO"]).to_lower().to_list() == ["héllo"]
+def test_unicode_to_lower(g):
+    result = g.traversal().V().has("name", "HÉLLO").values("name").to_lower().to_list()  # AttributeError
+    assert result == ["héllo"]
 
 
-def test_pipeline_composition():
-    result = P(["  alice@EXAMPLE.COM  "]).trim().to_lower().to_list()
+def test_pipeline_composition(g):
+    result = (
+        g.traversal().V()
+        .has("name", "  alice@EXAMPLE.COM  ")
+        .values("name")
+        .trim()
+        .to_lower()
+        .to_list()  # AttributeError
+    )
     assert result == ["alice@example.com"]

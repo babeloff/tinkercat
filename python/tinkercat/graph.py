@@ -7,6 +7,7 @@ follow Python conventions and best practices.
 """
 
 from typing import Dict, Any, Optional, List, Iterator, Union
+import threading
 import weakref
 
 from .bindings import NativeGraphHandle
@@ -46,6 +47,7 @@ class TinkerCat:
             self._edges: Dict[int, 'Edge'] = {}
             self._vertex_id_counter = 0
             self._closed = False
+            self._lock = threading.Lock()
         except TinkerCatNativeError as e:
             raise TinkerCatError(f"Failed to create TinkerCat: {e}") from e
 
@@ -117,8 +119,8 @@ class TinkerCat:
         if label is not None and not isinstance(label, str):
             raise_validation_error("label", "str or None", label)
 
-        if vertex_id is not None and not isinstance(vertex_id, str):
-            raise_validation_error("vertex_id", "str or None", vertex_id)
+        # Accept any hashable type for vertex_id; pass str form to native
+        native_vertex_id = str(vertex_id) if vertex_id is not None else None
 
         # Set default label
         if label is None:
@@ -130,22 +132,23 @@ class TinkerCat:
             all_properties["label"] = label
 
         try:
-            if all_properties:
-                vertex_ptr = self._native.add_vertex_with_properties(vertex_id, all_properties)
-            else:
-                vertex_ptr = self._native.add_vertex(vertex_id)
+            with self._lock:
+                if all_properties:
+                    vertex_ptr = self._native.add_vertex_with_properties(native_vertex_id, all_properties)
+                else:
+                    vertex_ptr = self._native.add_vertex(native_vertex_id)
 
-            # Get the actual ID from the native vertex if not provided
-            if vertex_id is None:
-                try:
-                    vertex_id = self._native.get_vertex_id(vertex_ptr)
-                except:
-                    # Fall back to internal counter if native ID retrieval fails
-                    vertex_id = str(self._vertex_id_counter)
-                    self._vertex_id_counter += 1
+                # Get the actual ID from the native vertex if not provided
+                if vertex_id is None:
+                    try:
+                        vertex_id = self._native.get_vertex_id(vertex_ptr)
+                    except:
+                        # Fall back to internal counter if native ID retrieval fails
+                        vertex_id = str(self._vertex_id_counter)
+                        self._vertex_id_counter += 1
 
-            vertex = Vertex(self, vertex_ptr, vertex_id, label, properties)
-            self._vertices[vertex_ptr] = vertex
+                vertex = Vertex(self, vertex_ptr, vertex_id, label, properties)
+                self._vertices[vertex_ptr] = vertex
             return vertex
 
         except TinkerCatNativeError as e:
@@ -186,19 +189,20 @@ class TinkerCat:
             raise TinkerCatValidationError("Vertices must belong to the same graph")
 
         try:
-            if properties:
-                edge_ptr = self._native.add_edge_with_properties(
-                    label, out_vertex._ptr, in_vertex._ptr, properties
-                )
-            else:
-                edge_ptr = self._native.add_edge(label, out_vertex._ptr, in_vertex._ptr)
+            with self._lock:
+                if properties:
+                    edge_ptr = self._native.add_edge_with_properties(
+                        label, out_vertex._ptr, in_vertex._ptr, properties
+                    )
+                else:
+                    edge_ptr = self._native.add_edge(label, out_vertex._ptr, in_vertex._ptr)
 
-            # Generate edge ID if not provided
-            if edge_id is None:
-                edge_id = f"{out_vertex.id}-{label}->{in_vertex.id}"
+                # Generate edge ID if not provided
+                if edge_id is None:
+                    edge_id = f"{out_vertex.id}-{label}->{in_vertex.id}"
 
-            edge = Edge(self, edge_ptr, edge_id, label, out_vertex, in_vertex, properties)
-            self._edges[edge_ptr] = edge
+                edge = Edge(self, edge_ptr, edge_id, label, out_vertex, in_vertex, properties)
+                self._edges[edge_ptr] = edge
             return edge
 
         except TinkerCatNativeError as e:
@@ -358,7 +362,7 @@ class Vertex:
         """Clean up native resources."""
         if not self._disposed and self._ptr:
             graph = self._graph()
-            if graph and hasattr(graph, '_native'):
+            if graph is not None and hasattr(graph, '_native'):
                 try:
                     graph._native.destroy_vertex(self._ptr)
                 except:
@@ -482,7 +486,7 @@ class Edge:
         """Clean up native resources."""
         if not self._disposed and self._ptr:
             graph = self._graph()
-            if graph and hasattr(graph, '_native'):
+            if graph is not None and hasattr(graph, '_native'):
                 try:
                     graph._native.destroy_edge(self._ptr)
                 except:

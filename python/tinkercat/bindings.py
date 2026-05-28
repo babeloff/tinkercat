@@ -56,6 +56,8 @@ class TinkerCatNativeLibrary:
             raise TinkerCatLibraryError(f"Unsupported platform: {sys.platform}")
 
         lib_filename = f"libtinkercat.{lib_extension}"
+        # Legacy name before project rename (pre-2025 build artifacts)
+        lib_filename_legacy = f"libtinkergraphs.{lib_extension}"
 
         # Search locations for the native library
         candidates = [
@@ -73,6 +75,11 @@ class TinkerCatNativeLibrary:
             Path(f"C:/Program Files/TinkerCat/{lib_filename}"),
             # macOS paths
             Path(f"/opt/homebrew/lib/{lib_filename}"),
+            # Legacy name fallbacks (pre-rename build artifacts)
+            current_dir / f"../../build/bin/native/releaseShared/{lib_filename_legacy}",
+            current_dir / f"../../build/bin/native/debugShared/{lib_filename_legacy}",
+            current_dir / lib_filename_legacy,
+            Path(sys.prefix) / "lib" / lib_filename_legacy,
         ]
 
         # Also check environment variable
@@ -110,6 +117,18 @@ class TinkerCatNativeLibrary:
                 fn.restype = restype
                 fn.argtypes = argtypes
             except AttributeError:
+                # Try legacy prefix (pre-rename build: tinkergraph_ instead of tinkercat_)
+                legacy_name = name.replace("tinkercat_", "tinkergraph_", 1)
+                if legacy_name != name:
+                    try:
+                        fn = getattr(self._lib, legacy_name)
+                        fn.restype = restype
+                        fn.argtypes = argtypes
+                        # Alias the legacy function under the expected name
+                        setattr(self._lib, name, fn)
+                        return
+                    except AttributeError:
+                        pass
                 missing.append(name)
 
         # Graph management

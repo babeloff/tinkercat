@@ -114,7 +114,7 @@ cmd = "python -m pip install -e python/"
 description = "Install the tinkercat Python package in editable/development mode"
 
 [tasks.test-python]
-cmd = "python -m pytest tests/ -v"
+cmd = "python -m pytest tests/ -v -n auto"
 description = "Run the Python test suite in tests/ against the installed TinkerCat package"
 
 [tasks.test-python-pkg]
@@ -187,3 +187,4 @@ go-yq = ">=4"
 
 [pypi-dependencies]
 toml-cli = "*"
+pytest-xdist = ">=3.8.0"

@@ -1,127 +1,85 @@
 """
 Tests for Task 7.4.5: call() Service Invocation Step.
 
-Validates the TraversalCallbackService interface, service registry,
-EchoService reference implementation, and mid-traversal call() semantics.
+All tests call g.traversal().V().call(service_name, context) on a live
+TinkerCat graph.  The call() step is not yet implemented; every test
+fails with AttributeError until it is added to GraphTraversal.
 See docs/project/changelog/task-7.4.5-call-step.adoc.
 """
 
 import pytest
-from typing import Any, Dict, Iterator, Optional
 
 from tinkercat import TinkerCat
 
-# ---------------------------------------------------------------------------
-# Mock service infrastructure
-# ---------------------------------------------------------------------------
 
-class TraversalCallbackService:
-    name: str
+@pytest.fixture
+def g():
+    graph = TinkerCat()
+    yield graph
+    graph.close()
 
-    def execute(
-        self,
-        context: Dict[str, Any],
-        inner_traversal=None,
-    ) -> Iterator[Dict[str, Any]]:
-        raise NotImplementedError
 
-class EchoService(TraversalCallbackService):
-    name = "echo"
+def test_call_step_returns_context(g):
+    g.add_vertex("person", name="Alice")
+    result = g.traversal().V().call("echo", {"hello": "world"}).to_list()  # AttributeError
+    assert result == [{"hello": "world"}]
 
-    def execute(self, context, inner_traversal=None):
-        return iter([context])
 
-class UpperCaseService(TraversalCallbackService):
-    """Returns context with all string values uppercased."""
-    name = "uppercase"
+def test_call_step_with_empty_context(g):
+    g.add_vertex("node")
+    result = g.traversal().V().call("echo", {}).to_list()  # AttributeError
+    assert result == [{}]
 
-    def execute(self, context, inner_traversal=None):
-        return iter([{k: v.upper() if isinstance(v, str) else v
-                      for k, v in context.items()}])
 
-class ServiceRegistry:
-    def __init__(self):
-        self._services: Dict[str, TraversalCallbackService] = {}
+def test_call_step_unknown_service_raises(g):
+    g.add_vertex("node")
+    with pytest.raises(Exception):
+        g.traversal().V().call("nonexistent_service", {}).to_list()  # AttributeError or ValueError
 
-    def register(self, service: TraversalCallbackService) -> "ServiceRegistry":
-        copy = ServiceRegistry()
-        copy._services = dict(self._services)
-        copy._services[service.name] = service
-        return copy
 
-    def call(self, name: str, context: Dict[str, Any], inner_traversal=None):
-        if name not in self._services:
-            raise ValueError(f"No service registered: '{name}'")
-        return list(self._services[name].execute(context, inner_traversal))
+def test_call_step_uppercase_service(g):
+    g.add_vertex("person", name="alice")
+    result = g.traversal().V().call("uppercase", {"msg": "hello"}).to_list()  # AttributeError
+    assert result[0]["msg"] == "HELLO"
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
-def test_echo_service_returns_context():
-    svc = EchoService()
-    ctx = {"hello": "world"}
-    result = list(svc.execute(ctx))
+def test_call_step_receives_traverser_context(g):
+    v = g.add_vertex("person", name="Alice")
+    ctx = {"_traverser": v.id, "mode": "test"}
+    result = g.traversal().V().has("name", "Alice").call("capture", ctx).to_list()  # AttributeError
     assert len(result) == 1
-    assert result[0] == ctx
+    assert result[0]["_traverser"] == v.id
 
-def test_echo_service_name():
-    assert EchoService.name == "echo"
 
-def test_registry_register_returns_new_instance():
-    r1 = ServiceRegistry()
-    r2 = r1.register(EchoService())
-    # r1 is immutable — echo not in r1
-    with pytest.raises(ValueError):
-        r1.call("echo", {})
-
-def test_registry_call_known_service():
-    r = ServiceRegistry().register(EchoService())
-    result = r.call("echo", {"key": "value"})
-    assert result == [{"key": "value"}]
-
-def test_registry_call_unknown_service_raises():
-    r = ServiceRegistry()
-    with pytest.raises(ValueError, match="No service registered"):
-        r.call("nonexistent", {})
-
-def test_two_services_coexist():
-    r = ServiceRegistry().register(EchoService()).register(UpperCaseService())
-    echo_r = r.call("echo", {"msg": "hello"})
-    upper_r = r.call("uppercase", {"msg": "hello"})
-    assert echo_r[0]["msg"] == "hello"
-    assert upper_r[0]["msg"] == "HELLO"
-
-def test_uppercase_service_only_affects_strings():
-    svc = UpperCaseService()
-    result = list(svc.execute({"name": "alice", "age": 30}))
+def test_call_step_only_affects_strings_in_context(g):
+    g.add_vertex("person")
+    result = g.traversal().V().call("uppercase", {"name": "alice", "age": 30}).to_list()  # AttributeError
     assert result[0]["name"] == "ALICE"
     assert result[0]["age"] == 30
 
-def test_mid_traversal_call_receives_traverser_context():
-    class CapturingService(TraversalCallbackService):
-        name = "capture"
-        received_contexts = []
 
-        def execute(self, context, inner_traversal=None):
-            self.received_contexts.append(dict(context))
-            return iter([context])
+def test_call_step_services_are_independent(g):
+    g.add_vertex("node")
+    echo_r = g.traversal().V().call("echo", {"msg": "hello"}).to_list()  # AttributeError
+    upper_r = g.traversal().V().call("uppercase", {"msg": "hello"}).to_list()  # AttributeError
+    assert echo_r[0]["msg"] == "hello"
+    assert upper_r[0]["msg"] == "HELLO"
 
-    svc = CapturingService()
-    r = ServiceRegistry().register(svc)
-    g = TinkerCat()
-    try:
-        v = g.add_vertex("person", name="Alice")
 
-        ctx = {"_traverser": v.id, "mode": "test"}
-        r.call("capture", ctx)
+def test_call_step_with_inner_traversal(g):
+    g.add_vertex("person", name="Alice")
+    result = (
+        g.traversal().V()
+        .has_label("person")
+        .call("echo", {}, g.traversal().V().has_label("person"))  # AttributeError
+        .to_list()
+    )
+    assert isinstance(result, list)
 
-        assert len(svc.received_contexts) == 1
-        assert svc.received_contexts[0]["_traverser"] == v.id
-    finally:
-        g.close()
 
-def test_service_with_empty_context():
-    r = ServiceRegistry().register(EchoService())
-    result = r.call("echo", {})
-    assert result == [{}]
+def test_call_step_registers_multiple_services(g):
+    g.add_vertex("item")
+    services = ["svc_a", "svc_b"]
+    for svc in services:
+        result = g.traversal().V().call(svc, {"key": "value"}).to_list()  # AttributeError
+        assert isinstance(result, list)
