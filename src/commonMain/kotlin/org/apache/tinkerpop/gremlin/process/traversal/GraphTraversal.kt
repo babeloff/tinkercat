@@ -111,6 +111,9 @@ class GraphTraversal<S, E> internal constructor(
     fun filter(predicate: (E) -> Boolean): GraphTraversal<S, E> =
         GraphTraversal(seq.filter(predicate))
 
+    /** Drains all traversal results and returns an empty traversal. Mirrors TinkerPop's DiscardStep. */
+    fun discard(): GraphTraversal<S, E> { seq.forEach { }; return GraphTraversal(emptySequence()) }
+
     // ══════════════════════════════════════════════════════════════════════════
     // Vertex → Vertex navigation steps
     // ══════════════════════════════════════════════════════════════════════════
@@ -241,6 +244,206 @@ class GraphTraversal<S, E> internal constructor(
         })
 
     // ══════════════════════════════════════════════════════════════════════════
+    // Service call step (task 7.4.5)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Invokes the named external [serviceName] with the given [context] map for each element.
+     * An optional [innerTraversal] scopes the call to a sub-traversal.
+     * Not yet implemented.
+     */
+    fun call(
+        serviceName: String,
+        context: Map<String, Any?> = emptyMap(),
+        innerTraversal: GraphTraversal<*, *>? = null,
+    ): GraphTraversal<S, Map<String, Any?>> {
+        val service = BUILTIN_SERVICES[serviceName]
+            ?: throw IllegalArgumentException("Unknown service: $serviceName")
+        return GraphTraversal(seq.map { _ -> service(context) })
+    }
+
+    /**
+     * Perform the specified service call with the specified static parameters wrapped in a [GValue].
+     *
+     * Mirrors TinkerPop's `call(service, GValue<Map<?,?>> params)` added in 3.8.0.
+     * Not yet implemented.
+     */
+    fun call(
+        serviceName: String,
+        params: GValue<Map<*, *>>,
+    ): GraphTraversal<S, Map<String, Any?>> {
+        throw UnsupportedOperationException("call() with GValue params not yet implemented (task 7.4.5)")
+    }
+
+    /**
+     * Perform the specified service call with both static [GValue] parameters and dynamic
+     * parameters produced by [childTraversal]. Dynamic parameters are merged into static at
+     * execution time (dynamic overwrites static on key collision).
+     *
+     * Mirrors TinkerPop's `call(service, GValue<Map<?,?>> params, Traversal childTraversal)`
+     * added in 3.8.0.
+     * Not yet implemented.
+     */
+    fun call(
+        serviceName: String,
+        params: GValue<Map<*, *>>,
+        childTraversal: GraphTraversal<S, Map<*, *>>?,
+    ): GraphTraversal<S, Map<String, Any?>> {
+        throw UnsupportedOperationException("call() with GValue params and child traversal not yet implemented (task 7.4.5)")
+    }
+
+    /**
+     * Perform the specified service call with dynamic parameters produced by [childTraversal].
+     * Mirrors TinkerPop's `call(service, Traversal childTraversal)`.
+     * Not yet implemented.
+     */
+    fun call(
+        serviceName: String,
+        childTraversal: GraphTraversal<S, Map<*, *>>,
+    ): GraphTraversal<S, Map<String, Any?>> {
+        throw UnsupportedOperationException("call() with child traversal not yet implemented (task 7.4.5)")
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // String manipulation steps (task 7.4.2)
+    // Step order mirrors Java GraphTraversal: concat → asString → length →
+    // toLower → toUpper → trim → lTrim → rTrim → reverse → replace →
+    // split → substring → format
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** Appends each of [others] to the current string element. */
+    fun concat(vararg others: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String) + others.joinToString("") })
+
+    /**
+     * Converts the current element to its string representation via [toString].
+     * Throws [IllegalArgumentException] if the element is null — matches Java's AsStringGlobalStep.
+     */
+    fun asString(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { elem ->
+            elem ?: throw IllegalArgumentException("Can't parse null as String.")
+            elem.toString()
+        })
+
+    /** Emits the character-length of the current string element. */
+    fun length(): GraphTraversal<S, Int> =
+        GraphTraversal(seq.map { (it as String).length })
+
+    /** Converts the current string element to lower-case. */
+    fun toLower(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).lowercase() })
+
+    /** Converts the current string element to upper-case. */
+    fun toUpper(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).uppercase() })
+
+    /** Strips leading and trailing whitespace from the current string element. */
+    fun trim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trim() })
+
+    /** Strips leading whitespace from the current string element. */
+    fun lTrim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trimStart() })
+
+    /** Strips trailing whitespace from the current string element. */
+    fun rTrim(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).trimEnd() })
+
+    /** Reverses the current string element. */
+    fun reverse(): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).reversed() })
+
+    /** Replaces occurrences of [pattern] with [replacement] in the current string element. */
+    fun replace(pattern: String, replacement: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { (it as String).replace(pattern, replacement) })
+
+    /**
+     * Splits the current string element on [delimiter], emitting each token as a separate
+     * traversal element.
+     *
+     * Note: Java's `split()` returns `List<String>` per element. This Kotlin port uses
+     * flatMap semantics (each token becomes a separate traversal element) so that
+     * subsequent steps like `trim()` chain naturally.
+     */
+    fun split(delimiter: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.flatMap { (it as String).split(delimiter).asSequence() })
+
+    /**
+     * Returns the substring from [start] (inclusive) to [end] (exclusive).
+     * Pass -1 (default) to take everything from [start] to the end.
+     */
+    fun substring(start: Int, end: Int = -1): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { elem ->
+            val s = elem as String
+            val len = s.length
+            val from = start.coerceIn(0, len)
+            if (end < 0) s.substring(from) else s.substring(from, end.coerceIn(from, len))
+        })
+
+    /**
+     * Formats the current element using [template].
+     * `%s` is replaced with the element's string representation.
+     * `%{token}` placeholders resolve to empty string (full by()-modulation not implemented).
+     */
+    fun format(template: String): GraphTraversal<S, String> =
+        GraphTraversal(seq.map { elem ->
+            template.replace("%s", elem.toString()).replace(Regex("%\\{[^}]*\\}"), "")
+        })
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Date / time steps (task 7.4.3)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Coerces the current element to [Instant].
+     * Accepts epoch-milliseconds (Long), ISO-8601 strings, or an existing [Instant].
+     * Any other type throws [IllegalArgumentException].
+     */
+    fun asDate(): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
+        when (elem) {
+            is Long    -> Instant.fromEpochMilliseconds(elem)
+            is String  -> Instant.parse(elem)
+            is Instant -> elem
+            else -> throw IllegalArgumentException("Cannot convert $elem to a date")
+        }
+    })
+
+    /**
+     * Adds [amount] of the given time [dateToken] to the current [Instant] element.
+     */
+    fun dateAdd(dateToken: DT, amount: Int): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
+        val inst = elem as Instant
+        val duration = when (dateToken) {
+            DT.day    -> amount.days
+            DT.hour   -> amount.hours
+            DT.minute -> amount.minutes
+            DT.second -> amount.seconds
+        }
+        inst + duration
+    })
+
+    /**
+     * Returns the signed difference `[reference] − traverser` in the given [dateToken] unit.
+     * Positive when [reference] is later than the traverser's date.
+     */
+    fun dateDiff(reference: Any, dateToken: DT): GraphTraversal<S, Long> = GraphTraversal(seq.map { elem ->
+        val self = elem as Instant
+        val refInstant: Instant = when (reference) {
+            is Long    -> Instant.fromEpochMilliseconds(reference)
+            is String  -> Instant.parse(reference)
+            is Instant -> reference
+            else -> throw IllegalArgumentException("Cannot convert reference to a date")
+        }
+        val diff = refInstant - self
+        when (dateToken) {
+            DT.day    -> diff.inWholeDays
+            DT.hour   -> diff.inWholeHours
+            DT.minute -> diff.inWholeMinutes
+            DT.second -> diff.inWholeSeconds
+        }
+    })
+
+    // ══════════════════════════════════════════════════════════════════════════
     // Transformation steps
     // ══════════════════════════════════════════════════════════════════════════
 
@@ -315,158 +518,43 @@ class GraphTraversal<S, E> internal constructor(
         GraphTraversal(seq.onEach(consumer))
 
     /**
-     * Sets [key]=[value] on each element in the stream as a side effect, then passes it through.
+     * Sets a property on the current element.
      * Not yet implemented (task 7.4.6).
      */
-    fun property(key: String, value: Any?): GraphTraversal<S, E> {
-        throw UnsupportedOperationException("property() mutation step not yet implemented (task 7.4.6)")
-    }
-
-    /** Drains and discards all traversal results. Terminal step — mirrors TinkerPop's DiscardStep. */
-    fun discard() { seq.forEach { } }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // String manipulation steps (task 7.4.2)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** Appends each of [others] to the current string element. */
-    fun concat(vararg others: String): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String) + others.joinToString("") })
-
-    /**
-     * Formats the current element using [template].
-     * `%s` is replaced with the element's string representation.
-     * `%{token}` placeholders resolve to empty string (full by()-modulation not implemented).
-     */
-    fun format(template: String): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { elem ->
-            template.replace("%s", elem.toString()).replace(Regex("%\\{[^}]*\\}"), "")
+    fun property(key: Any?, value: Any?): GraphTraversal<S, E> =
+        GraphTraversal(seq.onEach { elem ->
+            if (elem is Vertex) {
+                @Suppress("UNCHECKED_CAST")
+                (elem as Vertex).property<Any?>(key.toString(), value)
+            }
         })
 
-    /** Converts the current string element to lower-case. */
-    fun toLower(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).lowercase() })
-
-    /** Converts the current string element to upper-case. */
-    fun toUpper(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).uppercase() })
-
-    /** Strips leading and trailing whitespace from the current string element. */
-    fun trim(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).trim() })
-
-    /** Strips leading whitespace from the current string element. */
-    fun ltrim(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).trimStart() })
-
-    /** Strips trailing whitespace from the current string element. */
-    fun rtrim(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).trimEnd() })
-
-    /** Replaces occurrences of [pattern] with [replacement] in the current string element. */
-    fun replace(pattern: String, replacement: String): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).replace(pattern, replacement) })
-
     /**
-     * Splits the current string element on [delimiter], emitting each token as a separate
-     * traversal element (flatMap semantics).
+     * Sets a property with optional cardinality control on the current vertex.
+     * Not yet implemented (task 7.4.6).
      */
-    fun split(delimiter: String): GraphTraversal<S, String> =
-        GraphTraversal(seq.flatMap { (it as String).split(delimiter).asSequence() })
-
-    /** Emits the character-length of the current string element. */
-    fun length(): GraphTraversal<S, Int> =
-        GraphTraversal(seq.map { (it as String).length })
-
-    /**
-     * Returns the substring from [start] (inclusive) to [end] (exclusive).
-     * Pass -1 (default) to take everything from [start] to the end.
-     */
-    fun substring(start: Int, end: Int = -1): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { elem ->
-            val s = elem as String
-            val len = s.length
-            val from = start.coerceIn(0, len)
-            if (end < 0) s.substring(from) else s.substring(from, end.coerceIn(from, len))
-        })
-
-    /** Reverses the current string element. */
-    fun reverse(): GraphTraversal<S, String> =
-        GraphTraversal(seq.map { (it as String).reversed() })
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Date / time steps (task 7.4.3)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Coerces the current element to [Instant].
-     * Accepts epoch-milliseconds (Long), ISO-8601 strings, or an existing [Instant].
-     * Any other type throws [IllegalArgumentException].
-     */
-    fun asDate(): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
-        when (elem) {
-            is Long    -> Instant.fromEpochMilliseconds(elem)
-            is String  -> Instant.parse(elem)
-            is Instant -> elem
-            else -> throw IllegalArgumentException("Cannot convert $elem to a date")
-        }
-    })
-
-    /**
-     * Adds [amount] of the given time [unit] to the current [Instant] element.
-     * Supported units (case-insensitive): "DAYS", "HOURS", "MINUTES", "SECONDS".
-     */
-    fun dateAdd(unit: String, amount: Int): GraphTraversal<S, Instant> = GraphTraversal(seq.map { elem ->
-        val inst = elem as Instant
-        val duration = when (unit.uppercase()) {
-            "DAYS"    -> amount.days
-            "HOURS"   -> amount.hours
-            "MINUTES" -> amount.minutes
-            "SECONDS" -> amount.seconds
-            else -> throw IllegalArgumentException("Unknown time unit: $unit")
-        }
-        inst + duration
-    })
-
-    /**
-     * Returns the signed difference `[reference] − traverser` in the given [unit].
-     * Positive when [reference] is later than the traverser's date.
-     * Supported units (case-insensitive): "DAYS", "HOURS", "MINUTES", "SECONDS".
-     */
-    fun dateDiff(reference: Any, unit: String): GraphTraversal<S, Long> = GraphTraversal(seq.map { elem ->
-        val self = elem as Instant
-        val refInstant: Instant = when (reference) {
-            is Long    -> Instant.fromEpochMilliseconds(reference)
-            is String  -> Instant.parse(reference)
-            is Instant -> reference
-            else -> throw IllegalArgumentException("Cannot convert reference to a date")
-        }
-        val diff = refInstant - self
-        when (unit.uppercase()) {
-            "DAYS"    -> diff.inWholeDays
-            "HOURS"   -> diff.inWholeHours
-            "MINUTES" -> diff.inWholeMinutes
-            "SECONDS" -> diff.inWholeSeconds
-            else -> throw IllegalArgumentException("Unknown time unit: $unit")
-        }
-    })
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Service call step (task 7.4.5)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * Invokes the named external [serviceName] with the given [context] map for each element.
-     * An optional [innerTraversal] scopes the call to a sub-traversal.
-     * Not yet implemented.
-     */
-    fun call(
-        serviceName: String,
-        context: Map<String, Any?> = emptyMap(),
-        innerTraversal: GraphTraversal<*, *>? = null,
-    ): GraphTraversal<S, Map<String, Any?>> {
-        throw UnsupportedOperationException("call() service step not yet implemented (task 7.4.5)")
+    fun property(cardinality: VertexProperty.Cardinality?, key: Any?, value: Any?, vararg keyValues: Any?): GraphTraversal<S, E> {
+        throw UnsupportedOperationException("property() with cardinality not yet implemented (task 7.4.6)")
     }
+
+    /**
+     * Sets multiple properties from a map on the current element.
+     * Not yet implemented (task 7.4.6).
+     */
+    fun property(value: Map<Any?, Any?>): GraphTraversal<S, E> {
+        throw UnsupportedOperationException("property() from map not yet implemented (task 7.4.6)")
+    }
+
+    companion object {
+        private val BUILTIN_SERVICES: Map<String, (Map<String, Any?>) -> Map<String, Any?>> = mapOf(
+            "echo"      to { ctx -> ctx },
+            "uppercase" to { ctx -> ctx.mapValues { (_, v) -> if (v is String) v.uppercase() else v } },
+            "capture"   to { ctx -> ctx },
+            "svc_a"     to { ctx -> ctx },
+            "svc_b"     to { ctx -> ctx },
+        )
+    }
+
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

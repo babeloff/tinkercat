@@ -2,6 +2,7 @@ package org.apache.tinkerpop.gremlin.tinkercat.tests
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import org.apache.tinkerpop.gremlin.process.traversal.DT
 import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerCat
 import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerVertex
 
@@ -9,7 +10,6 @@ import org.apache.tinkerpop.gremlin.tinkercat.structure.TinkerVertex
  * Tests for Task 7.4.3: Date/Time Traversal Steps.
  *
  * All tests call asDate(), dateAdd(), and dateDiff() as traversal steps.
- * Each step throws UnsupportedOperationException until implemented.
  * Date values are stored as epoch-milliseconds (Long) or ISO-8601 strings,
  * since Kotlin Multiplatform commonMain has no java.time dependency.
  * Mirrors tests/python/test_7_4_3_datetime_steps.py.
@@ -73,7 +73,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             .has("ts", JAN_01_EPOCH_MS)
             .values<Long>("ts")
             .asDate()
-            .dateAdd("DAYS", 7)
+            .dateAdd(DT.day, 7)
             .toList()
         // 2024-01-01 + 7 days = 2024-01-08
         result.size shouldBe 1
@@ -84,7 +84,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             .has("ts", JAN_15_EPOCH_MS)
             .values<Long>("ts")
             .asDate()
-            .dateAdd("HOURS", 3)
+            .dateAdd(DT.hour, 3)
             .toList()
         result.size shouldBe 1
     }
@@ -94,7 +94,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             .has("ts", JAN_08_EPOCH_MS)
             .values<Long>("ts")
             .asDate()
-            .dateAdd("DAYS", -7)
+            .dateAdd(DT.day, -7)
             .toList()
         // 2024-01-08 - 7 days = 2024-01-01
         result.size shouldBe 1
@@ -105,7 +105,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             .has("ts", JAN_01_EPOCH_MS)
             .values<Long>("ts")
             .asDate()
-            .dateAdd("DAYS", 0)
+            .dateAdd(DT.day, 0)
             .toList()
         result.size shouldBe 1
     }
@@ -117,7 +117,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             .hasLabel("event")
             .values<Any>("ts")
             .asDate()
-            .dateDiff(JAN_08_EPOCH_MS, "DAYS")
+            .dateDiff(JAN_08_EPOCH_MS, DT.day)
             .toList()
         (result is List<*>) shouldBe true
     }
@@ -129,7 +129,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             val result = g2.traversal().V()
                 .values<Long>("ts")
                 .asDate()
-                .dateDiff(JAN_01_EPOCH_MS, "SECONDS")
+                .dateDiff(JAN_01_EPOCH_MS, DT.second)
                 .toList()
             result shouldBe listOf(0L)
         } finally {
@@ -147,7 +147,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             val result = g2.traversal().V()
                 .values<Long>("ts")
                 .asDate()
-                .dateDiff(epochB, "HOURS")
+                .dateDiff(epochB, DT.hour)
                 .toList()
             result shouldBe listOf(6L)
         } finally {
@@ -164,7 +164,7 @@ class Test_7_4_3_DatetimeSteps : StringSpec({
             val result = g2.traversal().V()
                 .values<String>("ts")
                 .asDate()
-                .dateAdd("DAYS", 30)
+                .dateAdd(DT.day, 30)
                 .toList()
             result.size shouldBe 1
         } finally {

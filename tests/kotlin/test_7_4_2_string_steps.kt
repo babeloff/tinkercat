@@ -89,18 +89,18 @@ class Test_7_4_2_StringSteps : StringSpec({
         result shouldBe listOf("hello")
     }
 
-    "ltrim strips leading whitespace only" {
+    "lTrim strips leading whitespace only" {
         val result = graph.traversal().V()
             .has("name", "  hello  ").values<String>("name")
-            .ltrim()
+            .lTrim()
             .toList()
         result shouldBe listOf("hello  ")
     }
 
-    "rtrim strips trailing whitespace only" {
+    "rTrim strips trailing whitespace only" {
         val result = graph.traversal().V()
             .has("name", "  hello  ").values<String>("name")
-            .rtrim()
+            .rTrim()
             .toList()
         result shouldBe listOf("  hello")
     }
