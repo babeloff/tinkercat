@@ -300,6 +300,149 @@ class GraphTraversal<S, E> internal constructor(
      */
     fun select(vararg keys: String): GraphTraversal<S, Any?> =
         GraphTraversal(seq.map { it as Any? })
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Side-effect steps
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** Applies [consumer] to each element as a side effect, then passes it through unchanged. */
+    fun sideEffect(consumer: (E) -> Unit): GraphTraversal<S, E> =
+        GraphTraversal(seq.onEach(consumer))
+
+    /**
+     * Sets [key]=[value] on each element in the stream as a side effect, then passes it through.
+     * Not yet implemented (task 7.4.6).
+     */
+    fun property(key: String, value: Any?): GraphTraversal<S, E> {
+        throw UnsupportedOperationException("property() mutation step not yet implemented (task 7.4.6)")
+    }
+
+    /**
+     * Drains and discards all traversal results. Analogous to Python's `discard()`.
+     * Not yet implemented (task 7.4.6); use [iterate] in the meantime.
+     */
+    fun discard() {
+        throw UnsupportedOperationException("discard() step not yet implemented (task 7.4.6)")
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // String manipulation steps (task 7.4.2)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** Appends each of [others] to the current string element. Not yet implemented. */
+    fun concat(vararg others: String): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("concat() string step not yet implemented (task 7.4.2)")
+    }
+
+    /**
+     * Formats the current string element using [template] (%s or %{token} placeholders).
+     * Not yet implemented.
+     */
+    fun format(template: String): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("format() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Converts the current string element to lower-case. Not yet implemented. */
+    fun toLower(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("toLower() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Converts the current string element to upper-case. Not yet implemented. */
+    fun toUpper(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("toUpper() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Strips leading and trailing whitespace from the current string element. Not yet implemented. */
+    fun trim(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("trim() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Strips leading whitespace from the current string element. Not yet implemented. */
+    fun ltrim(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("ltrim() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Strips trailing whitespace from the current string element. Not yet implemented. */
+    fun rtrim(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("rtrim() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Replaces occurrences of [pattern] with [replacement] in the current string element. Not yet implemented. */
+    fun replace(pattern: String, replacement: String): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("replace() string step not yet implemented (task 7.4.2)")
+    }
+
+    /**
+     * Splits the current string element on [delimiter], emitting the resulting tokens as
+     * separate traversal elements. Not yet implemented.
+     */
+    fun split(delimiter: String): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("split() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Emits the character-length of the current string element. Not yet implemented. */
+    fun length(): GraphTraversal<S, Int> {
+        throw UnsupportedOperationException("length() string step not yet implemented (task 7.4.2)")
+    }
+
+    /**
+     * Returns the substring of the current string element from [start] (inclusive) to
+     * [end] (exclusive). Omit [end] or pass -1 to take everything from [start]. Not yet implemented.
+     */
+    fun substring(start: Int, end: Int = -1): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("substring() string step not yet implemented (task 7.4.2)")
+    }
+
+    /** Reverses the current string element. Not yet implemented. */
+    fun reverse(): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("reverse() string step not yet implemented (task 7.4.2)")
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Date / time steps (task 7.4.3)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Coerces the current element to a date/time value.
+     * Accepts epoch-milliseconds (Long), ISO-8601 strings, or native date objects.
+     * Not yet implemented.
+     */
+    fun asDate(): GraphTraversal<S, Any> {
+        throw UnsupportedOperationException("asDate() step not yet implemented (task 7.4.3)")
+    }
+
+    /**
+     * Adds [amount] of the given time [unit] ("DAYS", "HOURS", "MINUTES", "SECONDS", …)
+     * to the current date element. Not yet implemented.
+     */
+    fun dateAdd(unit: String, amount: Int): GraphTraversal<S, Any> {
+        throw UnsupportedOperationException("dateAdd() step not yet implemented (task 7.4.3)")
+    }
+
+    /**
+     * Returns the difference in [unit] between the current date element and [reference].
+     * Not yet implemented.
+     */
+    fun dateDiff(reference: Any, unit: String): GraphTraversal<S, Long> {
+        throw UnsupportedOperationException("dateDiff() step not yet implemented (task 7.4.3)")
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Service call step (task 7.4.5)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Invokes the named external [serviceName] with the given [context] map for each element.
+     * An optional [innerTraversal] scopes the call to a sub-traversal.
+     * Not yet implemented.
+     */
+    fun call(
+        serviceName: String,
+        context: Map<String, Any?> = emptyMap(),
+        innerTraversal: GraphTraversal<*, *>? = null,
+    ): GraphTraversal<S, Map<String, Any?>> {
+        throw UnsupportedOperationException("call() service step not yet implemented (task 7.4.5)")
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

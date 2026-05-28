@@ -1,0 +1,21 @@
+{
+  "name": "tinkercat-npm-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript tests for TinkerCat JavaScript/TypeScript API",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "tinkercat": "file:../../build/js/packages/tinkercat"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

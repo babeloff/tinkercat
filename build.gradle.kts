@@ -159,6 +159,7 @@ kotlin {
             }
         }
         val jvmTest by getting {
+            kotlin.srcDir("tests/kotlin")
             dependencies {
                 implementation(libs.junit.jupiter)
                 implementation(libs.kotest.runner.junit5)
@@ -185,6 +186,7 @@ kotlin {
             dependencies { implementation(libs.kotlinx.coroutines.core) }
         }
         val nativeTest by getting {
+            kotlin.srcDir("tests/kotlin")
             dependencies {
                 implementation(libs.kotest.framework.engine)
                 implementation(libs.kotest.assertions.core)
@@ -504,7 +506,7 @@ tasks.register<Exec>("pythonComplianceTests") {
     group = "compliance"
     description = "Run Python compliance tests following Java compliance patterns"
     workingDir = file("python")
-    commandLine("python", "-m", "pytest", "tests/test_tinkercat_compliance.py", "-v")
+    commandLine("python", "-m", "pytest", "tests/python/test_tinkercat_compliance.py", "-v")
     isIgnoreExitValue = true
 
     val pythonTestsDir: File = file("python/tests")

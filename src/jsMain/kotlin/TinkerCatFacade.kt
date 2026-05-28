@@ -105,6 +105,88 @@ fun addVertexWithLabel(graph: TinkerCat, label: String, properties: Map<String, 
 }
 
 /**
+ * Add a vertex with label and properties supplied as parallel arrays.
+ * This variant is safe to call from JavaScript (avoids Map iteration issues).
+ *
+ * @param graph The graph to add the vertex to
+ * @param label Vertex label
+ * @param keys Property keys
+ * @param values Property values (same length as keys)
+ * @return The created vertex
+ */
+@JsExport
+fun addVertexWithLabelAndArrays(graph: TinkerCat, label: String, keys: Array<String>, values: Array<Any?>): Vertex {
+    val props = mutableMapOf<String, Any?>("label" to label)
+    keys.forEachIndexed { i, key -> props[key] = values[i] }
+    return graph.addVertex(props)
+}
+
+/**
+ * Add a vertex with properties supplied as parallel arrays (no label).
+ * This variant is safe to call from JavaScript (avoids Map iteration issues).
+ *
+ * @param graph The graph to add the vertex to
+ * @param keys Property keys
+ * @param values Property values (same length as keys)
+ * @return The created vertex
+ */
+@JsExport
+fun addVertexWithArrays(graph: TinkerCat, keys: Array<String>, values: Array<Any?>): Vertex {
+    val props = mutableMapOf<String, Any?>()
+    keys.forEachIndexed { i, key -> props[key] = values[i] }
+    return graph.addVertex(props)
+}
+
+/**
+ * Get the label of a graph element (vertex or edge).
+ * Provides JavaScript-accessible access to the mangled label() method.
+ *
+ * @param element The element to get the label from
+ * @return The element's label string
+ */
+@JsExport
+fun getLabel(element: Element): String = element.label()
+
+/**
+ * Get the ID of a graph element.
+ * Provides JavaScript-accessible access to the mangled id() method.
+ *
+ * @param element The element to get the ID from
+ * @return The element's ID
+ */
+@JsExport
+fun getElementId(element: Element): Any? = element.id()
+
+/**
+ * Remove a graph element (vertex or edge) from the graph.
+ * Provides JavaScript-accessible access to the mangled remove() method.
+ *
+ * @param element The element to remove
+ */
+@JsExport
+fun removeElement(element: Element) = element.remove()
+
+/**
+ * Get the in-vertex (target) of an edge.
+ * Provides JavaScript-accessible access to the mangled inVertex() method.
+ *
+ * @param edge The edge to get the in-vertex from
+ * @return The in-vertex
+ */
+@JsExport
+fun getInVertex(edge: Edge): Vertex = edge.inVertex()
+
+/**
+ * Get the out-vertex (source) of an edge.
+ * Provides JavaScript-accessible access to the mangled outVertex() method.
+ *
+ * @param edge The edge to get the out-vertex from
+ * @return The out-vertex
+ */
+@JsExport
+fun getOutVertex(edge: Edge): Vertex = edge.outVertex()
+
+/**
  * Get a vertex by ID.
  *
  * @param graph The graph to search in
@@ -169,6 +251,24 @@ fun addEdge(outVertex: Vertex, label: String, inVertex: Vertex, properties: Map<
 @JsName("addEdgeWithProperty")
 fun addEdge(outVertex: Vertex, label: String, inVertex: Vertex, propertyKey: String, propertyValue: Any?): Edge {
     return outVertex.addEdge(label, inVertex, mapOf(propertyKey to propertyValue))
+}
+
+/**
+ * Add an edge with properties supplied as parallel arrays.
+ * This variant is safe to call from JavaScript (avoids Map iteration issues).
+ *
+ * @param outVertex Source vertex
+ * @param label Edge label
+ * @param inVertex Target vertex
+ * @param keys Property keys
+ * @param values Property values (same length as keys)
+ * @return The created edge
+ */
+@JsExport
+fun addEdgeWithArrays(outVertex: Vertex, label: String, inVertex: Vertex, keys: Array<String>, values: Array<Any?>): Edge {
+    val props = mutableMapOf<String, Any?>()
+    keys.forEachIndexed { i, key -> props[key] = values[i] }
+    return outVertex.addEdge(label, inVertex, props)
 }
 
 /**

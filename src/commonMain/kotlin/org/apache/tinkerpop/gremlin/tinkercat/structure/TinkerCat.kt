@@ -305,6 +305,16 @@ class TinkerCat private constructor(private val configuration: Map<String, Any?>
     }
 
     /**
+     * Return a transaction handle.
+     *
+     * ACID transactions are not yet implemented in TinkerCat; [TinkerCatFeatures]
+     * already advertises `supportsTransactions() = false`. This method exists so
+     * code that calls [tx] compiles and links on all platforms. Every operation on
+     * the returned [TinkerTransaction] throws [UnsupportedOperationException].
+     */
+    fun tx(): TinkerTransaction = TinkerTransaction()
+
+    /**
      * Return a [GraphTraversalSource] backed by this graph.
      *
      * ```kotlin
