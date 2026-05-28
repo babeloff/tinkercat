@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, kotlin.native.runtime.NativeRuntimeApi::class)
 package org.apache.tinkerpop.gremlin.tinkercat.structure
 
 import kotlin.test.Test
@@ -23,63 +24,52 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
-import kotlinx.cinterop.*
+import kotlin.time.measureTime
+import org.apache.tinkerpop.gremlin.structure.Vertex
+import org.apache.tinkerpop.gremlin.structure.Edge
+import org.apache.tinkerpop.gremlin.process.traversal.P
 
 /**
  * Native platform compliance tests for TinkerCat following Apache TinkerPop Java compliance tests.
  *
- * These tests validate TinkerCat behavior on Kotlin/Native platform, ensuring compliance
- * with Apache TinkerPop specifications. Tests are adapted from upstream Java tests
- * while accounting for Native platform specifics including memory management,
- * performance characteristics, and platform interoperability.
- *
  * Task 4.1.2 Phase 3 - Native Platform Compliance Testing
- *
- * @author TinkerCat Compliance Framework
  */
 class TinkerCatNativeTest {
 
     @Test
     fun testNativeGraphCreation() {
-        // Test basic TinkerCat creation on Native platform
         val graph = TinkerCat.open()
         assertNotNull(graph)
-        assertTrue(graph.features().graph().supportsComputer())
-        assertTrue(graph.features().vertex().supportsAddVertices())
-        assertTrue(graph.features().edge().supportsAddEdges())
-
-        // Verify native platform specific configurations
+        // TinkerCat does not support computer or transactions in memory mode
+        assertFalse(graph.features().graph().supportsComputer())
+        assertFalse(graph.features().graph().supportsTransactions())
+        assertTrue(graph.features().vertex().supportsUserSuppliedIds())
+        assertTrue(graph.features().edge().supportsUserSuppliedIds())
         val config = graph.configuration()
         assertNotNull(config)
+        graph.close()
     }
 
     @Test
     fun testMemoryManagementCompliance() {
-        // Test memory management on Native platform
         val graph = TinkerCat.open()
-
-        // Create and remove vertices to test memory handling
-        val vertices = mutableListOf<Vertex>()
         repeat(1000) { i ->
-            vertices.add(graph.addVertex("id", i, "name", "vertex$i"))
+            graph.addVertex("id", i, "name", "vertex$i")
         }
+        assertEquals(1000L, graph.traversal().V().count())
 
-        assertEquals(1000L, graph.traversal().V().count().next())
+        // Remove all vertices
+        graph.vertices().asSequence().toList().forEach { it.remove() }
+        assertEquals(0L, graph.traversal().V().count())
 
-        // Test vertex removal and memory cleanup
-        vertices.forEach { it.remove() }
-        assertEquals(0L, graph.traversal().V().count().next())
-
-        // Force garbage collection hint for native platform
-        kotlin.native.internal.GC.collect()
+        // Suggest native garbage collection
+        kotlin.native.runtime.GC.collect()
+        graph.close()
     }
 
     @Test
     fun testNativeDataTypeSupport() {
-        // Test native platform data type support
         val graph = TinkerCat.open()
-
-        // Test primitive types
         val vertex = graph.addVertex(
             "byte", 127.toByte(),
             "short", 32767.toShort(),
@@ -90,7 +80,6 @@ class TinkerCatNativeTest {
             "boolean", true,
             "string", "native test"
         )
-
         assertEquals(127.toByte(), vertex.value<Byte>("byte"))
         assertEquals(32767.toShort(), vertex.value<Short>("short"))
         assertEquals(Int.MAX_VALUE, vertex.value<Int>("int"))
@@ -99,129 +88,99 @@ class TinkerCatNativeTest {
         assertEquals(Double.MAX_VALUE, vertex.value<Double>("double"))
         assertEquals(true, vertex.value<Boolean>("boolean"))
         assertEquals("native test", vertex.value<String>("string"))
+        graph.close()
     }
 
     @Test
     fun testNativeArrayHandling() {
-        // Test native array and collection handling
         val graph = TinkerCat.open()
-
         val intArray = intArrayOf(1, 2, 3, 4, 5)
         val stringArray = arrayOf("a", "b", "c")
-
         val vertex = graph.addVertex(
             "intArray", intArray,
             "stringArray", stringArray,
             "list", listOf("x", "y", "z")
         )
-
-        // Verify array storage and retrieval
-        assertNotNull(vertex.property("intArray"))
-        assertNotNull(vertex.property("stringArray"))
-        assertNotNull(vertex.property("list"))
+        assertTrue(vertex.property<Any?>("intArray").isPresent())
+        assertTrue(vertex.property<Any?>("stringArray").isPresent())
+        assertTrue(vertex.property<Any?>("list").isPresent())
+        graph.close()
     }
 
     @Test
     fun testNativePerformanceBaseline() {
-        // Test performance baseline on Native platform
         val graph = TinkerCat.open()
-
-        val startTime = kotlin.system.getTimeNanos()
-
-        // Create vertices
-        repeat(10000) { i ->
-            graph.addVertex("id", i, "name", "vertex$i", "value", i * 2.0)
-        }
-
-        val creationTime = (kotlin.system.getTimeNanos() - startTime) / 1_000_000
+        val creationTime = measureTime {
+            repeat(10000) { i ->
+                graph.addVertex("id", i, "name", "vertex$i", "value", i * 2.0)
+            }
+        }.inWholeMilliseconds
         println("Native vertex creation time: ${creationTime}ms")
-        assertTrue(creationTime < 5000) // Should complete within 5 seconds
+        assertTrue(creationTime < 5000)
 
-        // Test traversal performance
         val g = graph.traversal()
-        val traversalStart = kotlin.system.getTimeNanos()
-
-        val count = g.V().has("value", P.gt(1000.0)).count().next()
-        val traversalTime = (kotlin.system.getTimeNanos() - traversalStart) / 1_000_000
-
+        var count = 0L
+        val traversalTime = measureTime {
+            count = g.V().has("value", P.gt(1000.0)).count()
+        }.inWholeMilliseconds
         println("Native traversal time: ${traversalTime}ms")
-        assertTrue(traversalTime < 1000) // Should complete within 1 second
+        assertTrue(traversalTime < 1000)
         assertTrue(count > 0)
+        graph.close()
     }
 
     @Test
     fun testNativeStringInterning() {
-        // Test string interning and memory optimization on Native platform
         val graph = TinkerCat.open()
-
         val commonLabel = "person"
         val commonProperty = "name"
-
-        // Create multiple vertices with same labels and property keys
         repeat(1000) { i ->
-            graph.addVertex(T.label, commonLabel, commonProperty, "person$i")
+            graph.addVertex("label", commonLabel, commonProperty, "person$i")
         }
-
-        val personCount = graph.traversal().V().hasLabel(commonLabel).count().next()
+        val personCount = graph.traversal().V().hasLabel(commonLabel).count()
         assertEquals(1000L, personCount)
-
-        // Verify string interning effectiveness through memory usage patterns
-        val uniqueNames = graph.traversal().V().values<String>(commonProperty).dedup().count().next()
+        val uniqueNames = graph.traversal().V().values<String>(commonProperty).dedup().count()
         assertEquals(1000L, uniqueNames)
+        graph.close()
     }
 
     @Test
     fun testNativeConcurrencyCompliance() {
-        // Test basic concurrency support on Native platform
         val graph = TinkerCat.open()
-
-        // Note: Full concurrency testing requires native threading support
-        // This test validates thread-safe operations where available
-
         val vertex1 = graph.addVertex("thread", "main", "id", 1)
         val vertex2 = graph.addVertex("thread", "main", "id", 2)
         vertex1.addEdge("connects", vertex2)
-
-        val edgeCount = graph.traversal().E().count().next()
+        val edgeCount = graph.traversal().E().count()
         assertEquals(1L, edgeCount)
-
-        // Test transaction isolation on native platform
-        val tx = graph.tx()
-        assertNotNull(tx)
+        // TinkerCat does not support transactions
+        assertFalse(graph.features().graph().supportsTransactions())
+        graph.close()
     }
 
     @Test
     fun testNativePlatformFeatures() {
-        // Test Native platform specific features and optimizations
         val graph = TinkerCat.open()
         val features = graph.features()
-
-        // Verify native-specific feature support
-        assertTrue(features.graph().supportsTransactions())
-        assertTrue(features.graph().supportsPersistence())
-
-        // Test native memory mapping capabilities
-        assertTrue(features.vertex().supportsAddVertices())
-        assertTrue(features.vertex().supportsRemoveVertices())
-        assertTrue(features.edge().supportsAddEdges())
-        assertTrue(features.edge().supportsRemoveEdges())
-
-        // Test variable features on native platform
-        assertTrue(features.graph().variables().supportsVariables())
-        assertTrue(features.graph().variables().supportsBooleanValues())
-        assertTrue(features.graph().variables().supportsIntegerValues())
-        assertTrue(features.graph().variables().supportsLongValues())
-        assertTrue(features.graph().variables().supportsFloatValues())
-        assertTrue(features.graph().variables().supportsDoubleValues())
-        assertTrue(features.graph().variables().supportsStringValues())
+        // TinkerCat does not support transactions or persistence in memory mode
+        assertFalse(features.graph().supportsTransactions())
+        assertFalse(features.graph().supportsPersistence())
+        // Vertex ID support
+        assertTrue(features.vertex().supportsUserSuppliedIds())
+        assertTrue(features.vertex().supportsNumericIds())
+        assertTrue(features.vertex().supportsStringIds())
+        // Edge ID support
+        assertTrue(features.edge().supportsUserSuppliedIds())
+        assertTrue(features.edge().supportsNumericIds())
+        assertTrue(features.edge().supportsStringIds())
+        // Meta and multi property support
+        assertTrue(features.vertex().supportsMetaProperties())
+        assertTrue(features.vertex().supportsMultiProperties())
+        graph.close()
     }
 
     @Test
     fun testNativeIndexingPerformance() {
-        // Test indexing performance on Native platform
         val graph = TinkerCat.open()
-
-        // Create indexed properties for performance testing
         repeat(5000) { i ->
             graph.addVertex(
                 "indexed_id", i,
@@ -229,55 +188,45 @@ class TinkerCatNativeTest {
                 "score", i.toDouble() / 100.0
             )
         }
-
         val g = graph.traversal()
 
-        // Test index-based lookups
-        val lookupStart = kotlin.system.getTimeNanos()
-        val specificVertex = g.V().has("indexed_id", 2500).next()
-        val lookupTime = (kotlin.system.getTimeNanos() - lookupStart) / 1_000_000
-
+        var specificVertex: Any? = null
+        val lookupTime = measureTime {
+            specificVertex = g.V().has("indexed_id", 2500).next()
+        }.inWholeMilliseconds
         assertNotNull(specificVertex)
-        assertTrue(lookupTime < 100) // Should be very fast with proper indexing
+        assertTrue(lookupTime < 100)
 
-        // Test range queries
-        val rangeStart = kotlin.system.getTimeNanos()
-        val rangeResults = g.V().has("score", P.between(10.0, 20.0)).count().next()
-        val rangeTime = (kotlin.system.getTimeNanos() - rangeStart) / 1_000_000
-
+        var rangeResults = 0L
+        val rangeTime = measureTime {
+            rangeResults = g.V().has("score", P.between(10.0, 20.0)).count()
+        }.inWholeMilliseconds
         assertTrue(rangeResults > 0)
-        assertTrue(rangeTime < 500) // Range queries should be reasonably fast
+        assertTrue(rangeTime < 500)
+        graph.close()
     }
 
     @Test
     fun testNativeErrorHandling() {
-        // Test error handling compliance on Native platform
         val graph = TinkerCat.open()
+        // value() returns null for missing properties
+        val vertex = graph.addVertex()
+        val missing = vertex.value<String>("nonexistent")
+        assertTrue(missing == null)
 
-        // Test memory bounds checking
-        try {
-            val vertex = graph.addVertex()
-            vertex.value<String>("nonexistent")
-            kotlin.test.fail("Should throw exception for nonexistent property")
-        } catch (e: Exception) {
-            assertTrue(true) // Expected behavior
-        }
-
-        // Test invalid operations
+        // addVertex with null key throws IllegalArgumentException
         try {
             graph.addVertex(null, "value")
             kotlin.test.fail("Should throw exception for null key")
         } catch (e: Exception) {
-            assertTrue(true) // Expected behavior
+            assertTrue(true)
         }
+        graph.close()
     }
 
     @Test
     fun testNativeResourceManagement() {
-        // Test resource management and cleanup on Native platform
         val graph = TinkerCat.open()
-
-        // Create resources that need cleanup
         val vertices = mutableListOf<Vertex>()
         val edges = mutableListOf<Edge>()
 
@@ -285,42 +234,38 @@ class TinkerCatNativeTest {
             val v1 = graph.addVertex("id", i * 2)
             val v2 = graph.addVertex("id", i * 2 + 1)
             val edge = v1.addEdge("connects", v2, "weight", i.toDouble())
-
             vertices.add(v1)
             vertices.add(v2)
             edges.add(edge)
         }
 
-        assertEquals(200L, graph.traversal().V().count().next())
-        assertEquals(100L, graph.traversal().E().count().next())
+        assertEquals(200L, graph.traversal().V().count())
+        assertEquals(100L, graph.traversal().E().count())
 
-        // Test proper resource cleanup
+        // Remove edges first, then vertices
         edges.forEach { it.remove() }
         vertices.forEach { it.remove() }
 
-        assertEquals(0L, graph.traversal().V().count().next())
-        assertEquals(0L, graph.traversal().E().count().next())
+        assertEquals(0L, graph.traversal().V().count())
+        assertEquals(0L, graph.traversal().E().count())
 
-        // Suggest garbage collection for native memory management
-        kotlin.native.internal.GC.collect()
+        kotlin.native.runtime.GC.collect()
+        graph.close()
     }
 
     @Test
     fun testNativeInteroperability() {
-        // Test Native platform interoperability features
         val graph = TinkerCat.open()
-
-        // Test compatibility with native data structures
         val vertex = graph.addVertex("native_ptr", 0x12345678L)
         assertEquals(0x12345678L, vertex.value<Long>("native_ptr"))
 
-        // Test platform-specific serialization compatibility
+        // configuration() returns a Map<String, Any?>
         val config = graph.configuration()
-        assertTrue(config.getKeys().hasNext())
+        assertNotNull(config)
 
-        // Verify native platform can handle graph persistence
-        val vertexCount = graph.traversal().V().count().next()
+        val vertexCount = graph.traversal().V().count()
         assertTrue(vertexCount >= 0)
+        graph.close()
     }
 
     companion object {

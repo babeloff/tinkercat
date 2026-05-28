@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+@file:OptIn(kotlin.experimental.ExperimentalNativeApi::class, kotlin.native.runtime.NativeRuntimeApi::class)
 package org.apache.tinkerpop.gremlin.tinkercat.compliance
 
 import kotlin.test.Test
@@ -24,7 +25,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
-import kotlinx.cinterop.*
 
 /**
  * Native platform compliance tests for TinkerCat following Apache TinkerPop compliance patterns.
@@ -103,7 +103,7 @@ class NativeComplianceTests {
         vertices.clear()
 
         // Force native garbage collection
-        kotlin.native.internal.GC.collect()
+        kotlin.native.runtime.GC.collect()
 
         // Verify memory management
         val remainingCount = graph.traversal().V().count().next()
@@ -164,20 +164,21 @@ class NativeComplianceTests {
         val graph = MockTinkerCat.open()
 
         // Benchmark vertex creation with native timing
-        val startTime = kotlin.system.getTimeNanos()
-        repeat(10000) { i ->
-            graph.addVertex("id", i, "name", "vertex$i", "value", i * 2.0)
-        }
-        val creationTime = (kotlin.system.getTimeNanos() - startTime) / 1_000_000
+        val creationTime = kotlin.time.measureTime {
+            repeat(10000) { i ->
+                graph.addVertex("id", i, "name", "vertex$i", "value", i * 2.0)
+            }
+        }.inWholeMilliseconds
 
         println("Native vertex creation time: ${creationTime}ms")
         assertTrue(creationTime < 5000) // Should complete within 5 seconds
 
         // Benchmark traversal operations
         val g = graph.traversal()
-        val traversalStart = kotlin.system.getTimeNanos()
-        val count = g.V().has("value", MockP.gt(1000.0)).count().next()
-        val traversalTime = (kotlin.system.getTimeNanos() - traversalStart) / 1_000_000
+        var count: Long = 0
+        val traversalTime = kotlin.time.measureTime {
+            count = g.V().has("value", MockP.gt(1000.0)).count().next()
+        }.inWholeMilliseconds
 
         println("Native traversal time: ${traversalTime}ms")
         assertTrue(traversalTime < 1000) // Should complete within 1 second
@@ -240,7 +241,7 @@ class NativeComplianceTests {
         resources.clear()
 
         // Force native garbage collection
-        kotlin.native.internal.GC.collect()
+        kotlin.native.runtime.GC.collect()
 
         // Verify cleanup
         assertTrue(true) // Resource cleanup completed
@@ -368,17 +369,19 @@ class NativeComplianceTests {
         val g = graph.traversal()
 
         // Test index-based lookups with native timing
-        val lookupStart = kotlin.system.getTimeNanos()
-        val specificVertex = g.V().has("indexed_id", 2500).next()
-        val lookupTime = (kotlin.system.getTimeNanos() - lookupStart) / 1_000_000
+        var specificVertex: Any? = null
+        val lookupTime = kotlin.time.measureTime {
+            specificVertex = g.V().has("indexed_id", 2500).next()
+        }.inWholeMilliseconds
 
         assertNotNull(specificVertex)
         assertTrue(lookupTime < 100) // Should be very fast with proper indexing
 
         // Test range queries
-        val rangeStart = kotlin.system.getTimeNanos()
-        val rangeResults = g.V().has("score", MockP.between(10.0, 20.0)).count().next()
-        val rangeTime = (kotlin.system.getTimeNanos() - rangeStart) / 1_000_000
+        var rangeResults: Long = 0
+        val rangeTime = kotlin.time.measureTime {
+            rangeResults = g.V().has("score", MockP.between(10.0, 20.0)).count().next()
+        }.inWholeMilliseconds
 
         assertTrue(rangeResults > 0)
         assertTrue(rangeTime < 500) // Range queries should be reasonably fast
@@ -590,6 +593,7 @@ class NativeComplianceTests {
         fun next(): T = values.first()
         fun toList(): List<T> = values
         fun dedup(): MockValueTraversal<T> = MockValueTraversal(values.distinct())
+        fun count(): MockCountTraversal = MockCountTraversal(values.size.toLong())
     }
 
     private class MockCountTraversal(private val count: Long) {

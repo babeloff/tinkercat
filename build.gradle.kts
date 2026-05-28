@@ -505,9 +505,10 @@ tasks.register<Exec>("pythonComplianceTests") {
     description = "Run Python compliance tests following Java compliance patterns"
     workingDir = file("python")
     commandLine("python", "-m", "pytest", "tests/test_tinkercat_compliance.py", "-v")
+    isIgnoreExitValue = true
 
+    val pythonTestsDir: File = file("python/tests")
     doFirst {
-        val pythonTestsDir = file("python/tests")
         if (pythonTestsDir.exists()) {
             println("🧪 Running Python compliance tests...")
         } else {
@@ -520,8 +521,6 @@ tasks.register<Exec>("pythonComplianceTests") {
         println("✅ Python compliance tests completed")
         println("📊 Python Platform: TinkerPop compliant")
     }
-
-    isIgnoreExitValue = true
 }
 
 // Combined non-Kotlin platform compliance
