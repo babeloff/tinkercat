@@ -7,6 +7,7 @@ GraphTraversal; no work is performed until a terminal step is called.
 """
 
 from __future__ import annotations
+import builtins as _builtins
 from typing import Any, Callable, Iterator, List, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -131,6 +132,77 @@ class GraphTraversal:
 
     def tail(self, n: int = 1) -> "GraphTraversal":
         return GraphTraversal(self._pipeline[-n:])
+
+    # ── Type conversion (TinkerPop 3.8.0) ─────────────────────────────────────
+
+    def as_bool(self) -> "GraphTraversal":
+        def convert(v):
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, str):
+                return v.lower() == "true" or v == "1"
+            if isinstance(v, (int, float)):
+                return v != 0
+            if v is None:
+                raise ValueError("Can't parse null as Boolean.")
+            raise TypeError(f"Cannot convert {v!r} to Boolean")
+        return GraphTraversal(convert(v) for v in self._pipeline)
+
+    def as_number(self) -> "GraphTraversal":
+        def convert(v):
+            if isinstance(v, bool):
+                return 1 if v else 0
+            if isinstance(v, (int, float)):
+                return v
+            if isinstance(v, str):
+                try:
+                    return int(v)
+                except ValueError:
+                    try:
+                        return float(v)
+                    except ValueError:
+                        raise ValueError(f"Cannot parse '{v}' as a number")
+            if v is None:
+                raise ValueError("Can't parse null as Number.")
+            raise TypeError(f"Cannot convert {v!r} to Number")
+        return GraphTraversal(convert(v) for v in self._pipeline)
+
+    # ── Collection steps (TinkerPop 3.8.0) ────────────────────────────────────
+
+    def all(self, predicate) -> "GraphTraversal":
+        def check(v):
+            if isinstance(v, (list, tuple, set, frozenset)):
+                return _builtins.all(predicate.test(x) for x in v)
+            return predicate.test(v)
+        return GraphTraversal(v for v in self._pipeline if check(v))
+
+    def any(self, predicate) -> "GraphTraversal":
+        def check(v):
+            if isinstance(v, (list, tuple, set, frozenset)):
+                return _builtins.any(predicate.test(x) for x in v)
+            return predicate.test(v)
+        return GraphTraversal(v for v in self._pipeline if check(v))
+
+    def difference(self, values) -> "GraphTraversal":
+        raise NotImplementedError("difference() step not yet implemented")
+
+    def disjunct(self, values) -> "GraphTraversal":
+        raise NotImplementedError("disjunct() step not yet implemented")
+
+    def intersect(self, values) -> "GraphTraversal":
+        raise NotImplementedError("intersect() step not yet implemented")
+
+    def conjoin(self, delimiter: str) -> "GraphTraversal":
+        raise NotImplementedError("conjoin() step not yet implemented")
+
+    def combine(self, values) -> "GraphTraversal":
+        raise NotImplementedError("combine() step not yet implemented")
+
+    def product(self, values) -> "GraphTraversal":
+        raise NotImplementedError("product() step not yet implemented")
+
+    def merge(self, values) -> "GraphTraversal":
+        raise NotImplementedError("merge() step not yet implemented")
 
     # ── Terminal ───────────────────────────────────────────────────────────────
 

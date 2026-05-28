@@ -18,14 +18,49 @@ description = "Run an arbitrary Gradle task (pass the task name as an argument)"
 [tasks.build]
 cmd = "gradle build"
 description = "Compile all Kotlin targets and run the full test suite"
+inputs = [
+    "src/**/*.kt",
+    "tests/kotlin/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = [
+    "build/libs/*.jar",
+    "build/js/packages/tinkercat/kotlin/*.js",
+    "build/bin/native/releaseShared/libtinkercat.so",
+    "build/test-results/**/*.xml",
+]
 
 [tasks.compile-all]
 cmd = "gradle compileKotlinJvm compileKotlinJs compileKotlinNative"
 description = "Compile all Kotlin targets (JVM, JS, Native) without running tests"
+inputs = [
+    "src/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = [
+    "build/classes/kotlin/jvm/main/**/*.class",
+    "build/classes/kotlin/js/main/**",
+    "build/classes/kotlin/native/main/**",
+]
 
 [tasks.compile]
 cmd = "gradle compileKotlinJvm"
 description = "Compile the JVM target only"
+inputs = [
+    "src/commonMain/**/*.kt",
+    "src/jvmMain/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/classes/kotlin/jvm/main/**/*.class"]
 
 [tasks.clean]
 cmd = "gradle clean"
@@ -36,6 +71,15 @@ description = "Delete all Gradle build outputs and generated files"
 [tasks.test]
 cmd = "gradle allTests"
 description = "Run all test suites across JVM, JS, and Native targets"
+inputs = [
+    "src/**/*.kt",
+    "tests/kotlin/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/test-results/**/*.xml"]
 
 [tasks.test-safe]
 cmd = "gradle allTests || (echo 'Tests failed - checking what compiles...' && gradle compileKotlinJvm && echo 'JVM code compiles successfully' && gradle compileKotlinJs && echo 'JS code compiles successfully' && gradle compileKotlinNative && echo 'Native code compiles successfully')"
@@ -52,30 +96,84 @@ description = "Verify that test source code compiles for all targets"
 [tasks.test-jvm]
 cmd = "gradle jvmTest"
 description = "Run JVM tests only"
+inputs = [
+    "src/**/*.kt",
+    "tests/kotlin/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/test-results/jvmTest/**/*.xml"]
 
 [tasks.test-js]
 cmd = "gradle jsTest"
 description = "Run all JavaScript tests (browser and Node.js)"
+inputs = [
+    "src/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = [
+    "build/test-results/jsBrowserTest/**/*.xml",
+    "build/test-results/jsNodeTest/**/*.xml",
+]
 
 [tasks.test-native]
 cmd = "gradle nativeTest"
 description = "Run Kotlin/Native tests only"
+inputs = [
+    "src/**/*.kt",
+    "tests/kotlin/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/test-results/nativeTest/**/*.xml"]
 
 [tasks.test-js-browser]
 cmd = "gradle jsBrowserTest"
 description = "Run JavaScript tests in a headless browser"
+inputs = [
+    "src/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/test-results/jsBrowserTest/**/*.xml"]
 
 [tasks.test-js-node]
 cmd = "gradle jsNodeTest"
 description = "Run JavaScript tests under Node.js"
+inputs = [
+    "src/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/test-results/jsNodeTest/**/*.xml"]
 
 [tasks.test-npm]
 cmd = "gradle compileProductionExecutableKotlinJs && cd tests/npm && npm install && npm test"
 description = "Run TypeScript tests in tests/npm/ against the compiled Kotlin/JS output"
+inputs = [
+    "tests/npm/test_*.ts",
+    "tests/npm/package.json",
+    "tests/npm/tsconfig.json",
+    "tests/npm/vitest.config.ts",
+    "build/compileSync/js/main/productionExecutable/kotlin/tinkercat.js",
+]
 
 [tasks.test-npm-install]
 cmd = "cd tests/npm && npm install"
 description = "Install npm devDependencies for tests/npm/ (vitest, typescript)"
+inputs  = ["tests/npm/package.json"]
+outputs = ["tests/npm/node_modules/.package-lock.json"]
 
 [tasks.test-help]
 cmd = "echo 'Available test commands:' && echo '  pixi run test               - All Kotlin tests (JVM + JS + Native)' && echo '  pixi run test-jvm           - JVM tests only' && echo '  pixi run test-js            - JavaScript tests (browser + Node.js)' && echo '  pixi run test-native        - Kotlin/Native tests only (includes tests/kotlin/)' && echo '  pixi run test-python        - Python test suite (tests/python/)' && echo '  pixi run test-python-pkg    - Python package integration tests (python/tests/)' && echo '  pixi run test-npm           - TypeScript tests in tests/npm/ (requires npm)' && echo '  pixi run test-js-browser    - JS tests in browser only' && echo '  pixi run test-js-node       - JS tests in Node.js only' && echo '  pixi run test-safe          - All Kotlin tests with compile fallback' && echo '  pixi run test-compile-check - Verify main code compiles' && echo '  pixi run test-code-check    - Verify test code compiles'"
@@ -86,6 +184,14 @@ description = "Print a summary of all available test tasks"
 [tasks.docs]
 cmd = "gradle generateDocs"
 description = "Generate project API documentation via Gradle"
+inputs = [
+    "src/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/dokka/**"]
 
 [tasks.docs-setup]
 cmd = "gem install asciidoctor asciidoctor-diagram asciidoctor-revealjs asciidoctor-pdf"
@@ -94,14 +200,20 @@ description = "Install Ruby gems required for AsciiDoc documentation rendering"
 [tasks.docs-adoc]
 cmd = "asciidoctor -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.html"
 description = "Render docs/roadmap.adoc to HTML with diagram support"
+inputs  = ["docs/**/*.adoc"]
+outputs = ["build/docs/roadmap.html"]
 
 [tasks.docs-pdf]
 cmd = "asciidoctor-pdf -r asciidoctor-diagram docs/roadmap.adoc -o build/docs/roadmap.pdf"
 description = "Render docs/roadmap.adoc to PDF with diagram support"
+inputs  = ["docs/**/*.adoc"]
+outputs = ["build/docs/roadmap.pdf"]
 
 [tasks.docs-slides]
 cmd = "asciidoctor-revealjs docs/roadmap.adoc -o build/docs/roadmap-slides.html"
 description = "Render docs/roadmap.adoc as a reveal.js slide deck"
+inputs  = ["docs/**/*.adoc"]
+outputs = ["build/docs/roadmap-slides.html"]
 
 [tasks.docs-all]
 cmd = "pixi run docs-adoc && pixi run docs-pdf && pixi run docs-slides"
@@ -116,18 +228,42 @@ description = "Report Ruby version and whether each required asciidoctor gem is 
 [tasks.python-native]
 cmd = "gradle linkNative"
 description = "Compile the Kotlin/Native target and link libtinkercat.so for Python ctypes use"
+inputs = [
+    "src/commonMain/**/*.kt",
+    "src/nativeMain/**/*.kt",
+    "build.gradle.kts",
+    "settings.gradle.kts",
+    "gradle.properties",
+    "gradle/libs.versions.toml",
+]
+outputs = ["build/bin/native/releaseShared/libtinkercat.so"]
 
 [tasks.python-setup]
 cmd = "python -m pip install -e python/"
 description = "Install the tinkercat Python package in editable/development mode"
+inputs = [
+    "python/tinkercat/**/*.py",
+    "python/pyproject.toml",
+]
+outputs = ["python/tinkergraphs.egg-info/PKG-INFO"]
 
 [tasks.test-python]
 cmd = "python -m pytest tests/python/ -v -n auto"
 description = "Run the Python test suite in tests/python/ against the installed TinkerCat package"
+inputs = [
+    "tests/python/**/*.py",
+    "python/tinkercat/**/*.py",
+    "python/pyproject.toml",
+]
 
 [tasks.test-python-pkg]
 cmd = "python -m pytest python/tests/ -v"
 description = "Run the Python package integration tests in python/tests/"
+inputs = [
+    "python/tests/**/*.py",
+    "python/tinkercat/**/*.py",
+    "python/pyproject.toml",
+]
 
 [tasks.python-build-test]
 cmd = "pixi run python-native && pixi run python-setup && pixi run test-python"
@@ -160,6 +296,11 @@ description = "Run the Kotlin/Native platform demo showcasing native performance
 [tasks.compliance]
 cmd = "nu pixi-scripts/compliance_deviation_analysis.nu"
 description = "Analyze TinkerPop compliance deviations and write a report to build/reports/compliance/"
+inputs = [
+    "pixi-scripts/compliance_deviation_analysis.nu",
+    "src/**/*.kt",
+]
+outputs = ["build/reports/compliance/**"]
 
 # ── Packaging ─────────────────────────────────────────────────────────────────
 
@@ -168,16 +309,43 @@ description = "Analyze TinkerPop compliance deviations and write a report to bui
 [tasks.package]
 cmd = "nu pixi-scripts/package-build.nu"
 description = "Build all conda packages defined in recipes/recipe.yaml using rattler-build"
+inputs = [
+    "pixi-scripts/package-build.nu",
+    "recipes/recipe.yaml",
+    "build/libs/*.jar",
+    "build/bin/native/releaseShared/libtinkercat.so",
+]
+outputs = ["build/conda-packages/**"]
 
 # ── Version management ────────────────────────────────────────────────────────
 
 [tasks.version-sync]
 cmd = "nu pixi-scripts/version-sync.nu"
 description = "Propagate the version from pixi.toml to recipes/recipe.yaml, build.gradle.kts, and python/tinkercat/__init__.py"
+inputs = [
+    "pixi.toml",
+    "pixi-scripts/version-sync.nu",
+]
+outputs = [
+    "recipes/recipe.yaml",
+    "build.gradle.kts",
+    "python/tinkercat/__init__.py",
+]
 
 [tasks.version-bump]
 cmd = "nu pixi-scripts/version-bump.nu"
 description = "Increment the patch version in pixi.toml, then run version-sync"
+inputs = [
+    "pixi.toml",
+    "pixi-scripts/version-bump.nu",
+    "pixi-scripts/version-sync.nu",
+]
+outputs = [
+    "pixi.toml",
+    "recipes/recipe.yaml",
+    "build.gradle.kts",
+    "python/tinkercat/__init__.py",
+]
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 

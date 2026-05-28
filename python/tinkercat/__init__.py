@@ -31,6 +31,7 @@ __email__ = "dev@tinkerpop.apache.org"
 from .graph import TinkerCat, Vertex, Edge
 from .exceptions import TinkerCatError
 from .bindings import NATIVE_AVAILABLE
+from .predicates import P
 
 # Define what gets imported with "from tinkercat import *"
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "Edge",
     "TinkerCatError",
     "NATIVE_AVAILABLE",
+    "P",
 ]
 
 # Package metadata

@@ -444,6 +444,151 @@ class GraphTraversal<S, E> internal constructor(
     })
 
     // ══════════════════════════════════════════════════════════════════════════
+    // Type-conversion steps (added in TinkerPop 3.8.0)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Coerces the current element to a [Boolean].
+     * - A [Boolean] is returned unchanged.
+     * - `"true"` / `"1"` (case-insensitive) → `true`; any other string → `false`.
+     * - A non-zero [Number] → `true`; zero → `false`.
+     * - `null` throws [IllegalArgumentException].
+     *
+     * Mirrors TinkerPop's `AsBoolStep` (introduced in 3.8.0).
+     */
+    fun asBool(): GraphTraversal<S, Boolean> = GraphTraversal(seq.map { elem ->
+        when (elem) {
+            is Boolean -> elem
+            is String  -> elem.lowercase() == "true" || elem == "1"
+            is Number  -> elem.toDouble() != 0.0
+            null -> throw IllegalArgumentException("Can't parse null as Boolean.")
+            else -> throw IllegalArgumentException("Cannot convert $elem to Boolean")
+        }
+    })
+
+    /**
+     * Coerces the current element to a [Number].
+     * - A [Number] is returned unchanged.
+     * - A [String] is parsed as [Long] (if it has no decimal point) or [Double].
+     * - A [Boolean] is converted to `1L` (true) or `0L` (false).
+     * - `null` throws [IllegalArgumentException].
+     *
+     * Mirrors TinkerPop's `AsNumberStep` (introduced in 3.8.0).
+     */
+    fun asNumber(): GraphTraversal<S, Number> = GraphTraversal(seq.map { elem ->
+        when (elem) {
+            is Number  -> elem
+            is String  -> elem.toLongOrNull() ?: elem.toDoubleOrNull()
+                ?: throw IllegalArgumentException("Cannot parse '$elem' as a number")
+            is Boolean -> if (elem) 1L else 0L
+            null -> throw IllegalArgumentException("Can't parse null as Number.")
+            else -> throw IllegalArgumentException("Cannot convert $elem to Number")
+        }
+    })
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Collection / set steps (added in TinkerPop 3.8.0)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Filters out traversers where the current element is a collection and *not all* of its
+     * members satisfy [predicate]. When the element is a scalar the predicate is tested directly.
+     *
+     * Mirrors TinkerPop's `AllStep` (introduced in 3.8.0).
+     */
+    fun all(predicate: P): GraphTraversal<S, E> =
+        GraphTraversal(seq.filter { elem ->
+            when (elem) {
+                is Iterable<*> -> elem.all { predicate.test(it) }
+                else -> predicate.test(elem)
+            }
+        })
+
+    /**
+     * Filters out traversers where the current element is a collection and *none* of its
+     * members satisfy [predicate]. When the element is a scalar the predicate is tested directly.
+     *
+     * Mirrors TinkerPop's `AnyStep` (introduced in 3.8.0).
+     */
+    fun any(predicate: P): GraphTraversal<S, E> =
+        GraphTraversal(seq.filter { elem ->
+            when (elem) {
+                is Iterable<*> -> elem.any { predicate.test(it) }
+                else -> predicate.test(elem)
+            }
+        })
+
+    /**
+     * Produces the set difference between the current element (treated as a [Set]) and [values].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `DifferenceStep` (introduced in 3.8.0).
+     */
+    fun difference(values: Any?): GraphTraversal<S, Set<*>> {
+        throw UnsupportedOperationException("difference() step not yet implemented")
+    }
+
+    /**
+     * Produces the symmetric difference (XOR) between the current element and [values].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `DisjunctStep` (introduced in 3.8.0).
+     */
+    fun disjunct(values: Any?): GraphTraversal<S, Set<*>> {
+        throw UnsupportedOperationException("disjunct() step not yet implemented")
+    }
+
+    /**
+     * Produces the set intersection between the current element and [values].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `IntersectStep` (introduced in 3.8.0).
+     */
+    fun intersect(values: Any?): GraphTraversal<S, Set<*>> {
+        throw UnsupportedOperationException("intersect() step not yet implemented")
+    }
+
+    /**
+     * Joins the elements of the current collection into a single [String] using [delimiter].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `ConjoinStep` (introduced in 3.8.0).
+     */
+    fun conjoin(delimiter: String): GraphTraversal<S, String> {
+        throw UnsupportedOperationException("conjoin() step not yet implemented")
+    }
+
+    /**
+     * Appends [values] to the current [List] element, producing a new list (union).
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `CombineStep` (introduced in 3.8.0).
+     */
+    fun combine(values: Any?): GraphTraversal<S, List<*>> {
+        throw UnsupportedOperationException("combine() step not yet implemented")
+    }
+
+    /**
+     * Produces the Cartesian product of the current list and [values].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's `ProductStep` (introduced in 3.8.0).
+     */
+    fun product(values: Any?): GraphTraversal<S, List<List<*>>> {
+        throw UnsupportedOperationException("product() step not yet implemented")
+    }
+
+    /**
+     * Merges the current collection / map element with [values].
+     * Not yet implemented.
+     *
+     * Mirrors TinkerPop's merge step (introduced in 3.8.0).
+     */
+    fun merge(values: Any?): GraphTraversal<S, E> {
+        throw UnsupportedOperationException("merge() step not yet implemented")
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // Transformation steps
     // ══════════════════════════════════════════════════════════════════════════
 
